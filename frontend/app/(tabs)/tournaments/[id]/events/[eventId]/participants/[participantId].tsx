@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Animated, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Animated, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -31,6 +31,7 @@ export default function EventParticipantDetailScreen() {
   const [tempReps, setTempReps] = useState('');
   const [tempWeight, setTempWeight] = useState('');
   const [hasSyncedActivity, setHasSyncedActivity] = useState(false);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
   
   // Stopwatch state
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
@@ -62,6 +63,7 @@ export default function EventParticipantDetailScreen() {
   useEffect(() => {
     if (activeTab === 'Activity' && eventId && participantId && tournamentId && !hasSyncedActivity) {
       console.log('[EventParticipantDetailScreen] Activity tab opened - syncing activity...');
+      setIsLoadingActivity(true);
       activityService.getMetrics(parseInt(eventId), parseInt(participantId))
         .then(metrics => {
           console.log('[EventParticipantDetailScreen] Received activity metrics:', metrics);
@@ -75,9 +77,11 @@ export default function EventParticipantDetailScreen() {
             });
           }
           setHasSyncedActivity(true);
+          setIsLoadingActivity(false);
         })
         .catch(error => {
           console.error('[EventParticipantDetailScreen] Failed to sync activity:', error);
+          setIsLoadingActivity(false);
         });
     }
   }, [activeTab, eventId, participantId, tournamentId, hasSyncedActivity, updateEventParticipantData]);
@@ -873,7 +877,23 @@ export default function EventParticipantDetailScreen() {
 
   const renderActivityTab = () => (
     <View style={{ paddingBottom: insets.bottom + 100 }}>
-      {eventData?.attempts && eventData.attempts.length > 0 ? (
+      {isLoadingActivity ? (
+        <View style={{
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 40,
+        }}>
+          <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
+          <Text style={{
+            fontSize: 14,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-secondary'],
+            marginTop: 12,
+          }}>
+            Loading activity...
+          </Text>
+        </View>
+      ) : eventData?.attempts && eventData.attempts.length > 0 ? (
         eventData.attempts
           .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
           .map((attempt) => (

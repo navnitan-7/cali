@@ -26,7 +26,7 @@ export default function CreateEventScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const isEditMode = !!eventId;
   const { getTournament, getEvent, addEvent, updateEvent } = useTournamentStore();
-  const { eventTypes, getCachedEventTypes } = useEventTypesStore();
+  const { eventTypes } = useEventTypesStore();
   
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
   const existingEvent = tournamentId && eventId ? getEvent(tournamentId, eventId) : undefined;
@@ -44,14 +44,8 @@ export default function CreateEventScreen() {
     defaultValues: eventDefaults,
   });
 
-  // Load cached event types on mount
-  React.useEffect(() => {
-    const cachedTypes = getCachedEventTypes();
-    // If no cached types, try to fetch (this should have been done on app init)
-    if (cachedTypes.length === 0) {
-      useEventTypesStore.getState().fetchEventTypes();
-    }
-  }, []);
+  // Event types should already be loaded from app initialization
+  // No need to fetch here - just use cached types
 
   // Pre-fill form when editing
   React.useEffect(() => {
@@ -318,11 +312,12 @@ export default function CreateEventScreen() {
             </Text>
             
             <Button
-              title={isSaving ? "Saving..." : "Save"}
+              title="Save"
               onPress={handleSubmit(onSubmit)}
               variant="primary"
               size="small"
               disabled={!canSave || isSaving}
+              loading={isSaving}
               style={{ minWidth: 60, position: 'relative', zIndex: 1 }}
             />
             

@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "repx",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -20,6 +20,7 @@
     },
     "web": {
       "bundler": "metro",
+      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [

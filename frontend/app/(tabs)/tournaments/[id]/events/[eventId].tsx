@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -24,6 +24,7 @@ export default function EventDetailScreen() {
     deleteEvent,
     getEventParticipantData,
     syncEventDetails,
+    isLoadingEventDetails,
   } = useTournamentStore();
   const [activeTab, setActiveTab] = useState('Participants');
   const [menuVisible, setMenuVisible] = useState(false);
@@ -123,9 +124,28 @@ export default function EventDetailScreen() {
   }
 
 
-  const renderParticipantsTab = () => (
-    <View style={{ paddingBottom: insets.bottom + 100 }}>
-      {eventParticipants.length === 0 ? (
+  const renderParticipantsTab = () => {
+    const isLoading = isLoadingEventDetails[eventId];
+    
+    return (
+      <View style={{ paddingBottom: insets.bottom + 100 }}>
+        {isLoading ? (
+          <View style={{
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 40,
+          }}>
+            <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
+            <Text style={{
+              fontSize: 14,
+              fontFamily: getFontFamily('medium'),
+              color: colors['text-secondary'],
+              marginTop: 12,
+            }}>
+              Loading participants...
+            </Text>
+          </View>
+        ) : eventParticipants.length === 0 ? (
         <View style={{
           alignItems: 'center',
           justifyContent: 'center',
@@ -292,7 +312,8 @@ export default function EventDetailScreen() {
         })
       )}
     </View>
-  );
+    );
+  };
 
   const renderLeaderboardTab = () => {
     if (leaderboard.length === 0) {
@@ -524,13 +545,6 @@ export default function EventDetailScreen() {
                     {event.category}
                   </Text>
                 </View>
-                <Text style={{
-                  fontSize: 12,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                }}>
-                  {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </Text>
               </View>
             </View>
             <TouchableOpacity onPress={() => setMenuVisible(true)}>

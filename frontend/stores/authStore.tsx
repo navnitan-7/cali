@@ -146,23 +146,42 @@ export const useAuthStore = create<AuthStore>()(
 
       checkAuth: async () => {
         try {
-          const isAuth = await authService.isAuthenticated();
-          if (isAuth) {
-            const user = await authService.getCurrentUser();
-            const token = await authService.getStoredToken();
-            set({ 
-              isAuthenticated: true, 
-              user,
-              token 
-            });
-          } else {
+          const token = await authService.getStoredToken();
+          
+          // Only check auth status if we have a token
+          if (!token) {
             set({ 
               isAuthenticated: false, 
               user: null,
               token: null 
             });
+            return;
+          }
+          
+          // Try to get current user to verify token is still valid
+          try {
+            const user = await authService.getCurrentUser();
+            set({ 
+              isAuthenticated: true, 
+              user,
+              token 
+            });
+          } catch (error: any) {
+            // Token is invalid or expired, clear auth state silently
+            // Don't log this as an error since it's expected on first launch
+            if (error.response?.status === 401) {
+              console.log('[AuthStore] Stored token is invalid, clearing auth state');
+            }
+            set({ 
+              isAuthenticated: false, 
+              user: null,
+              token: null 
+            });
+            // Clear invalid token from storage
+            await authService.logout();
           }
         } catch (error) {
+          // Unexpected error, clear auth state
           set({ 
             isAuthenticated: false, 
             user: null,

@@ -25,7 +25,9 @@ export default function CreateParticipantScreen() {
   const [name, setName] = useState('');
   const [weight, setWeight] = useState('');
   const [division, setDivision] = useState('');
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!tournament) {
     return (
@@ -43,20 +45,27 @@ export default function CreateParticipantScreen() {
       return;
     }
 
+    if (selectedEvents.length === 0) {
+      Alert.alert('Error', 'Please select at least one event');
+      return;
+    }
+
     try {
+      setIsSaving(true);
       await addParticipant(tournamentId!, {
-      name: name.trim(),
-      weight: weight ? parseFloat(weight) : undefined,
-      division: division || undefined,
-    });
-    router.back();
+        name: name.trim(),
+        weight: weight ? parseFloat(weight) : undefined,
+        division: division || undefined,
+      }, selectedEvents);
+      router.back();
     } catch (error) {
       console.error('Error creating participant:', error);
       Alert.alert('Error', 'Failed to create participant. Please try again.');
+      setIsSaving(false);
     }
   };
 
-  const canSave = name.trim().length > 0;
+  const canSave = name.trim().length > 0 && selectedEvents.length > 0;
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors['bg-surface'] }}>
@@ -116,7 +125,8 @@ export default function CreateParticipantScreen() {
               onPress={handleSubmit}
               variant="primary"
               size="small"
-              disabled={!canSave}
+              disabled={!canSave || isSaving}
+              loading={isSaving}
               style={{ minWidth: 60, position: 'relative', zIndex: 1 }}
             />
             
@@ -208,6 +218,73 @@ export default function CreateParticipantScreen() {
                 onFocus={() => setFocusedInput('weight')}
                 onBlur={() => setFocusedInput(null)}
               />
+            </View>
+
+            {/* Events - Required */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
+                marginBottom: 8,
+              }}>
+                Events <Text style={{ color: colors['text-danger'] }}>*</Text>
+              </Text>
+              {tournament.events.length === 0 ? (
+                <View style={{
+                  padding: 16,
+                  borderRadius: 10,
+                  backgroundColor: colors['bg-card'],
+                  borderWidth: 1.5,
+                  borderColor: colors['border-default'],
+                }}>
+                  <Text style={{
+                    fontSize: 14,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-secondary'],
+                    fontStyle: 'italic',
+                  }}>
+                    No events available. Please create events first.
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {tournament.events.map((event) => {
+                    const isSelected = selectedEvents.includes(event.id);
+                    const selectedColor = accent || colors['bg-primary'];
+                    return (
+                      <TouchableOpacity
+                        key={event.id}
+                        onPress={() => {
+                          if (isSelected) {
+                            setSelectedEvents(selectedEvents.filter(id => id !== event.id));
+                          } else {
+                            setSelectedEvents([...selectedEvents, event.id]);
+                          }
+                        }}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 10,
+                          borderRadius: 20,
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? selectedColor : colors['border-default'],
+                          backgroundColor: isSelected 
+                            ? (accent ? getAccentWithOpacity(0.15) : selectedColor + '20')
+                            : colors['bg-card'],
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: 14,
+                          fontFamily: getFontFamily('medium'),
+                          color: isSelected ? selectedColor : colors['text-primary'],
+                        }}>
+                          {event.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             {/* Division */}

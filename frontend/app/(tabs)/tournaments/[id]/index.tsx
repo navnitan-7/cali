@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,7 +21,7 @@ export default function TournamentDetailScreen() {
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
-  const { getTournament, deleteTournament, syncEventsOnly, syncParticipantsOnly } = useTournamentStore();
+  const { getTournament, deleteTournament, syncEventsOnly, syncParticipantsOnly, isLoadingEvents, isLoadingParticipants } = useTournamentStore();
   const [activeTab, setActiveTab] = useState('Events');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -46,6 +46,22 @@ export default function TournamentDetailScreen() {
       }
     }
   }, [activeTab, tournamentId, hasSyncedEvents, syncEventsOnly]);
+
+  // Refresh events when screen comes into focus (e.g., after creating a new event)
+  useFocusEffect(
+    useCallback(() => {
+      if (activeTab === 'Events' && tournamentId) {
+        const { isLoadingEvents } = useTournamentStore.getState();
+        // Refresh events when screen is focused (but don't set hasSyncedEvents to avoid blocking)
+        if (!isLoadingEvents) {
+          console.log('[TournamentDetailScreen] Screen focused - refreshing events...');
+          syncEventsOnly(tournamentId).catch(error => {
+            console.error('[TournamentDetailScreen] Failed to refresh events:', error);
+          });
+        }
+      }
+    }, [activeTab, tournamentId, syncEventsOnly])
+  );
 
   // Sync participants when Participants tab is opened (only once per tab switch)
   useEffect(() => {
@@ -82,7 +98,23 @@ export default function TournamentDetailScreen() {
 
   const renderEventsTab = () => (
     <View style={{ paddingBottom: insets.bottom + 100 }}>
-      {tournament.events.length === 0 ? (
+      {isLoadingEvents ? (
+        <View style={{
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 40,
+        }}>
+          <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
+          <Text style={{
+            fontSize: 14,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-secondary'],
+            marginTop: 12,
+          }}>
+            Loading events...
+          </Text>
+        </View>
+      ) : tournament.events.length === 0 ? (
         <View style={{
           alignItems: 'center',
           justifyContent: 'center',
@@ -155,18 +187,6 @@ export default function TournamentDetailScreen() {
                     </View>
                     
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="calendar-outline" size={12} color={colors['text-secondary']} />
-                      <Text style={{
-                        fontSize: 12,
-                        fontFamily: getFontFamily('regular'),
-                        color: colors['text-secondary'],
-                        marginLeft: 4,
-                      }}>
-                        {new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </Text>
-                    </View>
-                    
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Ionicons name="people-outline" size={12} color={colors['text-secondary']} />
                       <Text style={{
                         fontSize: 12,
@@ -191,7 +211,23 @@ export default function TournamentDetailScreen() {
 
   const renderParticipantsTab = () => (
     <View style={{ paddingBottom: insets.bottom + 100 }}>
-      {tournament.participants.length === 0 ? (
+      {isLoadingParticipants ? (
+        <View style={{
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 40,
+        }}>
+          <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
+          <Text style={{
+            fontSize: 14,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-secondary'],
+            marginTop: 12,
+          }}>
+            Loading participants...
+          </Text>
+        </View>
+      ) : tournament.participants.length === 0 ? (
         <View style={{
           alignItems: 'center',
           justifyContent: 'center',

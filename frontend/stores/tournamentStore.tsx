@@ -46,7 +46,6 @@ export interface EventParticipantData {
 interface Event {
   id: string;
   name: string;
-  date: string;
   category: string;
   divisions: string[];
   metrics: string[];
@@ -90,7 +89,7 @@ interface TournamentStore {
   getTournament: (id: string) => Tournament | undefined;
   
   // Participant management
-  addParticipant: (tournamentId: string, participant: Omit<Participant, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  addParticipant: (tournamentId: string, participant: Omit<Participant, 'id' | 'createdAt' | 'updatedAt'>, eventIds?: string[]) => Promise<string>;
   updateParticipant: (tournamentId: string, participantId: string, updates: Partial<Participant>) => Promise<void>;
   deleteParticipant: (tournamentId: string, participantId: string) => void;
   getParticipant: (tournamentId: string, participantId: string) => Participant | undefined;
@@ -222,39 +221,20 @@ export const useTournamentStore = create<TournamentStore>()(
             const backendEvents = await eventService.getEvents();
           console.log('[TournamentStore] Received events from backend:', backendEvents);
           
-          // Get all participants from backend
+          // Get all participants from backend (but don't fetch participants for each event)
           const backendParticipants = await participantService.getParticipants();
           console.log('[TournamentStore] Received participants from backend:', backendParticipants);
           
-          // For each event, get its participants
-          const eventsWithParticipants = await Promise.all(
-            backendEvents.map(async (be: any) => {
-              try {
-                const eventParticipants = await participantService.getParticipantsByEvent(be.id);
-                return {
-                  event: be,
-                  participants: eventParticipants,
-                };
-              } catch (error) {
-                console.error(`[TournamentStore] Error fetching participants for event ${be.id}:`, error);
-                return {
-                  event: be,
-                  participants: [],
-                };
-              }
-            })
-          );
-          
-          // Transform backend events to tournament event format
-          const transformedEvents: Event[] = eventsWithParticipants.map(({ event: be, participants: eventParticipants }) => {
+          // Transform backend events to tournament event format (without fetching participants for each event)
+          // Participants will be fetched only when a specific event is opened
+          const transformedEvents: Event[] = backendEvents.map((be: any) => {
             return {
               id: be.id.toString(),
               name: be.name,
-              date: new Date().toISOString().split('T')[0], // Default date
               category: be.event_type || 'Other',
               divisions: ['Open'],
               metrics: ['time', 'reps'],
-              participantIds: eventParticipants.map((p: any) => p.id?.toString() || p.participant_id?.toString()).filter(Boolean),
+              participantIds: [], // Don't fetch participants here - will be fetched when event is opened
               participantData: {},
               status: 'upcoming',
               createdAt: new Date().toISOString(),
@@ -366,7 +346,6 @@ export const useTournamentStore = create<TournamentStore>()(
             return {
               id: be.id.toString(),
               name: be.name,
-              date: new Date().toISOString().split('T')[0],
               category: be.event_type || 'Other',
               divisions: ['Open'],
               metrics: ['time', 'reps'],
@@ -589,7 +568,7 @@ export const useTournamentStore = create<TournamentStore>()(
       },
       
       // Participant management
-      addParticipant: async (tournamentId, participant) => {
+      addParticipant: async (tournamentId, participant, eventIds) => {
         try {
           // Get all events for this tournament to get their IDs
           const tournament = get().tournaments.find(t => t.id === tournamentId);
@@ -597,8 +576,18 @@ export const useTournamentStore = create<TournamentStore>()(
             throw new Error('Tournament not found');
           }
 
-          // Get event IDs from tournament events (map string IDs to numbers)
-          const eventIds = tournament.events.map(e => parseInt(e.id)).filter(id => !isNaN(id));
+          // Use provided event IDs or fall back to all events in tournament
+          let selectedEventIds: number[];
+          if (eventIds && eventIds.length > 0) {
+            selectedEventIds = eventIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+          } else {
+            selectedEventIds = tournament.events.map(e => parseInt(e.id)).filter(id => !isNaN(id));
+          }
+
+          // Validate that at least one event is selected
+          if (selectedEventIds.length === 0) {
+            throw new Error('At least one event must be selected');
+          }
 
           // Call backend API to create participant
           const result = await participantService.createParticipant({
@@ -609,7 +598,7 @@ export const useTournamentStore = create<TournamentStore>()(
             phone: '', // Add if needed
             country: '', // Add if needed
             state: '', // Add if needed
-            event_id: eventIds.length > 0 ? eventIds : [], // Link to all events in tournament
+            event_id: selectedEventIds,
           });
 
           const id = result.participant_id.toString();
@@ -767,8 +756,8 @@ export const useTournamentStore = create<TournamentStore>()(
           ),
         }));
           
-          // Sync events from backend to ensure UI is updated
-          get().syncEventsFromBackend().catch(err => {
+          // Sync events for this specific tournament to ensure UI is updated
+          get().syncEventsOnly(tournamentId).catch(err => {
             console.error('[TournamentStore] Error syncing after event creation:', err);
           });
           

@@ -10,7 +10,6 @@ async def create_event(event: Event, current_user: dict = Depends(get_current_us
     try:
         # Use name as description if description is not provided
         description = event.description if event.description else event.name
-        print(event.name, description, event.event_type)
         db.execute_action("INSERT INTO cali_db.events (name, description, event_type) VALUES (:name, :description, :event_type)", {"name": event.name, "description": description, "event_type": event.event_type})
         return {"message": "Event created successfully"}
     except Exception as e:

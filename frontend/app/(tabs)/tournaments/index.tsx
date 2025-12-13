@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, NativeScrollEvent, NativeSyntheticEvent, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -143,7 +143,7 @@ export default function TournamentsScreen() {
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
-  const { tournaments, syncEventsFromBackend } = useTournamentStore();
+  const { tournaments, syncEventsFromBackend, isLoadingEvents } = useTournamentStore();
   const [showTopFade, setShowTopFade] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -255,7 +255,19 @@ export default function TournamentsScreen() {
 
           {/* Tournaments List */}
           <View style={{ paddingHorizontal: 16 }}>
-            {tournaments.length === 0 ? (
+            {isLoadingEvents ? (
+              <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingBottom: 40 }}>
+                <ActivityIndicator size="large" color={colors['bg-primary']} />
+                <Text style={{
+                  fontSize: 16,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginTop: 12,
+                }}>
+                  Loading tournaments...
+                </Text>
+              </View>
+            ) : tournaments.length === 0 ? (
               <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingBottom: 40 }}>
                 <Ionicons name="trophy-outline" size={40} color={colors['text-muted']} />
                 <Text style={{

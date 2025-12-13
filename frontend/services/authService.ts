@@ -98,11 +98,31 @@ class AuthService {
       
       return response.data;
     } catch (error: any) {
+      const isNetworkError = error.message === 'Network Error' || !error.response;
       console.error('[AuthService] Login failed:', {
         message: error.message,
         response: error.response?.data,
         status: error.response?.status,
+        isNetworkError,
+        config: error.config ? {
+          baseURL: error.config.baseURL,
+          url: error.config.url,
+          fullURL: `${error.config.baseURL}${error.config.url}`,
+        } : undefined,
       });
+      
+      // Provide user-friendly error message
+      if (isNetworkError) {
+        const enhancedError = new Error(
+          'Cannot connect to the server. Please check:\n' +
+          '1. Backend server is running\n' +
+          '2. Correct API URL is configured\n' +
+          '3. Network connection is working'
+        );
+        enhancedError.name = 'NetworkError';
+        throw enhancedError;
+      }
+      
       throw error;
     }
   }

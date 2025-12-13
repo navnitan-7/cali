@@ -5,20 +5,45 @@ import { router } from 'expo-router';
 // Determine the API base URL based on platform
 const getApiBaseUrl = () => {
   // Check for environment variable first
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  
+  if (envUrl) {
+    // If environment variable is set, handle Android-specific cases
+    if (Platform.OS === 'android') {
+      // Android emulator: 127.0.0.1 and localhost don't work, need 10.0.2.2
+      // Physical device: 127.0.0.1 doesn't work, need computer's IP
+      
+      // Parse URL manually (URL constructor may not work in all React Native environments)
+      const urlMatch = envUrl.match(/^https?:\/\/([^:]+):?(\d+)?/);
+      
+      if (urlMatch) {
+        const hostname = urlMatch[1];
+        const port = urlMatch[2] || '61944';
+        
+        // Replace localhost/127.0.0.1 with Android-appropriate address
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+          // For Android emulator, use 10.0.2.2 (special IP that maps to host's localhost)
+          // For physical device, you'll need to set your computer's IP in .env
+          // You can detect emulator vs device, but simpler to use 10.0.2.2 for emulator
+          // and set computer IP for physical device in .env
+          const protocol = envUrl.startsWith('https') ? 'https' : 'http';
+          return `${protocol}://10.0.2.2:${port}`;
+        }
+      }
+    }
+    
+    // For iOS and web, use the env URL as-is
+    return envUrl;
   }
   
-  // Default based on platform
+  // Default based on platform (fallback if no env var)
   if (Platform.OS === 'android') {
-    // For physical Android devices, use your computer's local IP
-    // For Android emulator, use: http://10.0.2.2:8000
-    // TODO: Create a .env file with: EXPO_PUBLIC_API_URL=http://YOUR_IP:8000
-    return 'http://192.168.1.17:8000';
+    // Default for Android emulator
+    return 'http://10.0.2.2:61944';
   }
   
   // iOS simulator and web can use localhost
-  return 'http://localhost:8000';
+  return 'http://localhost:61944';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -103,12 +128,46 @@ class ApiClient {
         return response;
       },
       async (error) => {
-        console.error('[API Response] Error:', {
+        const isNetworkError = error.message === 'Network Error' || !error.response;
+        const errorDetails = {
           url: error.config?.url,
+          baseURL: error.config?.baseURL,
+          fullURL: error.config ? `${error.config.baseURL}${error.config.url}` : 'unknown',
           status: error.response?.status,
           message: error.message,
           data: error.response?.data,
-        });
+        };
+        
+        // Don't log errors for /auth/me 401s (expected during auth check)
+        const requestUrl = error.config?.url || '';
+        const isAuthCheck = requestUrl.includes('/auth/me') || requestUrl === '/auth/me';
+        const isAuthCheck401 = isAuthCheck && error.response?.status === 401;
+        
+        if (!isAuthCheck401) {
+          console.error('[API Response] Error:', errorDetails);
+        }
+        
+        // Provide helpful error message for network errors
+        if (isNetworkError) {
+          console.error('[API Response] Network Error Details:', {
+            message: 'Could not reach the backend server',
+            attemptedURL: errorDetails.fullURL,
+            baseURL: API_BASE_URL,
+            platform: Platform.OS,
+            suggestions: [
+              '1. Make sure the backend server is running (check if you ran: uvicorn app.main:app --reload --host 0.0.0.0 --port 8000)',
+              `2. Verify the API URL is correct: ${API_BASE_URL}`,
+              Platform.OS === 'android' 
+                ? '3. For Android emulator, try: http://10.0.2.2:8000 instead of localhost'
+                : Platform.OS === 'web'
+                ? '3. For web, make sure you can access the backend at the configured URL'
+                : '3. Check your network connection',
+              Platform.OS === 'android'
+                ? '4. For physical Android device, ensure your device and computer are on the same network, and update the IP in apiConfig.ts'
+                : '',
+            ].filter(Boolean),
+          });
+        }
         if (error.response?.status === 401) {
           const requestUrl = error.config?.url || '';
           // Don't logout if 401 is from login/register endpoints (invalid credentials)
@@ -117,7 +176,10 @@ class ApiClient {
                                 requestUrl === '/auth/login' ||
                                 requestUrl === '/auth/register';
           
-          if (!isAuthEndpoint) {
+          // Don't log errors for /auth/me during auth check (expected behavior)
+          const isAuthCheck = requestUrl.includes('/auth/me') || requestUrl === '/auth/me';
+          
+          if (!isAuthEndpoint && !isAuthCheck) {
             // Check if user is authenticated BEFORE removing token
             // Using dynamic import to avoid circular dependency
             try {
@@ -146,6 +208,12 @@ class ApiClient {
               await storage.removeItem('auth_token');
               await storage.removeItem('token_type');
             }
+          }
+          
+          // Suppress error logging for /auth/me 401s (expected during auth check)
+          if (isAuthCheck) {
+            // Don't log this as an error, it's expected when checking auth status
+            return Promise.reject(error);
           }
         }
         return Promise.reject(error);

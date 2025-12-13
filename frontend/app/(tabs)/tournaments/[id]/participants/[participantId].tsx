@@ -26,6 +26,7 @@ export default function ParticipantDetailScreen() {
   const [name, setName] = useState(participant?.name || '');
   const [weight, setWeight] = useState(participant?.weight?.toString() || '');
   const [division, setDivision] = useState(participant?.division || '');
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!tournament || !participant) {
     return (
@@ -44,6 +45,7 @@ export default function ParticipantDetailScreen() {
     }
 
     try {
+      setIsSaving(true);
       await updateParticipant(tournamentId!, participantId!, {
       name: name.trim(),
       weight: weight ? parseFloat(weight) : undefined,
@@ -53,6 +55,7 @@ export default function ParticipantDetailScreen() {
     } catch (error) {
       console.error('Error updating participant:', error);
       Alert.alert('Error', 'Failed to update participant. Please try again.');
+      setIsSaving(false);
     }
   };
 
@@ -191,7 +194,8 @@ export default function ParticipantDetailScreen() {
             variant="primary"
             fullWidth
             style={{ marginTop: 12, marginBottom: 20 }}
-            disabled={!name.trim()}
+            disabled={!name.trim() || isSaving}
+            loading={isSaving}
           />
         </ScrollView>
 

@@ -12,7 +12,7 @@ import { useEventTypesStore } from '../stores/eventTypesStore';
 export default function SplashScreen() {
   const isDark = useIsDark();
   const colors = useColors(isDark);
-  const { isAuthenticated, checkAuth } = useAuthStore();
+  const { checkAuth } = useAuthStore();
   const { fetchEventTypes } = useEventTypesStore();
 
   useEffect(() => {
@@ -20,9 +20,12 @@ export default function SplashScreen() {
       // Check authentication
       await checkAuth();
       
+      // Get the updated auth state after checkAuth completes
+      const authState = useAuthStore.getState();
+      
       // Fetch and cache event types (only if authenticated)
       // Don't await - let it fetch in background
-      if (isAuthenticated) {
+      if (authState.isAuthenticated) {
         fetchEventTypes().catch((error) => {
           console.error('Error fetching event types on startup:', error);
         });
@@ -30,7 +33,7 @@ export default function SplashScreen() {
       
       // Navigate based on auth state after check completes
       setTimeout(() => {
-        if (isAuthenticated) {
+        if (authState.isAuthenticated) {
           router.replace('/(tabs)/tournaments');
         } else {
           router.replace('/login');

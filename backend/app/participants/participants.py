@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 from utils.variables import Participant
 from utils.db import db
@@ -8,6 +8,13 @@ router = APIRouter(prefix="/participants", tags=["participants"])
 
 @router.post("/create")
 async def create_participant(participant: Participant, current_user: dict = Depends(get_current_user)):
+    # Validate that at least one event is present
+    if not participant.event_id or len(participant.event_id) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one event must be selected"
+        )
+    
     # Use a connection with explicit transaction control
     with db.engine.begin() as conn:
         # Insert participant and get the ID
@@ -17,13 +24,12 @@ async def create_participant(participant: Participant, current_user: dict = Depe
         )
         participant_id = result.fetchone()[0]
                 
-        # Insert participant-event associations in the same transaction
-        for event in participant.event_id:
-            print(f"DEBUG: Inserting participant_id={participant_id}, event_id={event}")
-            conn.execute(
-                text("INSERT INTO cali_db.participants_events (participant_id, event_id) VALUES (:participant_id, :event_id)"),
-                {"participant_id": participant_id, "event_id": event}
-            )
+        # Insert participant-event associations in the same transaction using bulk insert
+        event_params = [{"participant_id": participant_id, "event_id": event} for event in participant.event_id]
+        conn.execute(
+            text("INSERT INTO cali_db.participants_events (participant_id, event_id) VALUES (:participant_id, :event_id)"),
+            event_params
+        )
         
         # Transaction will auto-commit on successful exit from context manager
         return {"message": "Participant created successfully", "participant_id": participant_id}

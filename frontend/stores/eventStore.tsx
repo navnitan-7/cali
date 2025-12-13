@@ -72,17 +72,10 @@ const asyncStorage = {
 
 // Default mock events
 const getDefaultEvents = (): EventWithParticipants[] => {
-  const now = new Date();
-  const futureDate1 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
-  const futureDate2 = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days from now
-  const futureDate3 = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days from now
-  const pastDate = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000); // 15 days ago
-
   return [
     {
       id: '1',
       name: 'Calisthenics Championship 2025',
-      date: futureDate1.toISOString().split('T')[0],
       category: 'Calisthenics',
       divisions: ['Men', 'Women', 'Open'],
       metrics: ['time', 'reps'],
@@ -93,7 +86,6 @@ const getDefaultEvents = (): EventWithParticipants[] => {
     {
       id: '2',
       name: 'Street Workout Battle',
-      date: futureDate2.toISOString().split('T')[0],
       category: 'Street Workout',
       divisions: ['Men', 'Women'],
       metrics: ['reps', 'weight'],
@@ -104,7 +96,6 @@ const getDefaultEvents = (): EventWithParticipants[] => {
     {
       id: '3',
       name: 'Pull-Up Challenge',
-      date: pastDate.toISOString().split('T')[0],
       category: 'Strength',
       divisions: ['Open'],
       metrics: ['reps'],
@@ -115,7 +106,6 @@ const getDefaultEvents = (): EventWithParticipants[] => {
     {
       id: '4',
       name: 'Muscle-Up Masters 2025',
-      date: futureDate3.toISOString().split('T')[0],
       category: 'Calisthenics',
       divisions: ['Men', 'Women'],
       metrics: ['time', 'reps', 'weight'],
@@ -147,7 +137,6 @@ export const useEventStore = create<EventStore>()(
             return {
               id: be.id.toString(),
               name: be.name,
-              date: existingEvent?.date || new Date().toISOString().split('T')[0],
               category: be.event_type,
               divisions: existingEvent?.divisions || ['Open'],
               metrics: existingEvent?.metrics || ['time', 'reps'],
