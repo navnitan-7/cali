@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from utils.variables import Participant
 from utils.db import db
-from app.auth.auth import get_current_user
+from app.auth.auth import get_current_user, verify_token
 
 router = APIRouter(prefix="/participants", tags=["participants"])
 
 @router.post("/create")
-def create_participant(participant: Participant, current_user: dict = Depends(get_current_user)):
+async def create_participant(participant: Participant, current_user: dict = Depends(get_current_user)):
     # Use a connection with explicit transaction control
     with db.engine.begin() as conn:
         # Insert participant and get the ID
@@ -29,11 +29,11 @@ def create_participant(participant: Participant, current_user: dict = Depends(ge
         return {"message": "Participant created successfully", "participant_id": participant_id}
 
 @router.get("/get")
-def get_participants(current_user: dict = Depends(get_current_user)):
+async def get_participants(current_user: dict = Depends(get_current_user)):
     return db.read("SELECT * FROM cali_db.participants")
 
 @router.get("/by_event/{id}")
-def get_participants_by_event(id: int, current_user: dict = Depends(get_current_user)):
+async def get_participants_by_event(id: int, current_user: dict = Depends(get_current_user)):
     return db.read("""
         SELECT p.*, pe.event_id, pe.participant_id 
         FROM cali_db.participants p
@@ -44,10 +44,10 @@ def get_participants_by_event(id: int, current_user: dict = Depends(get_current_
     """, {"id": id})
 
 @router.get("/get/{id}")
-def get_participant_details(id: int, current_user: dict = Depends(get_current_user)):
+async def get_participant_details(id: int, _: bool = Depends(verify_token)):
     return db.read("SELECT * FROM cali_db.participants WHERE id = :id", {"id": id})
 
 @router.put("/update/{id}")
-def update_participant(id: int, participant: Participant, current_user: dict = Depends(get_current_user)):
+async def update_participant(id: int, participant: Participant, current_user: dict = Depends(get_current_user)):
     db.execute_action("UPDATE cali_db.participants SET name = :name, age = :age, gender = :gender, weight = :weight, phone = :phone, country = :country, state = :state WHERE id = :id", {"name": participant.name, "age": participant.age, "gender": participant.gender, "weight": participant.weight, "phone": participant.phone, "country": participant.country, "state": participant.state, "id": id})
     return {"message": "Participant updated successfully"}

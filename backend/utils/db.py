@@ -16,8 +16,8 @@ class Database:
             port: Database port number
             name: Database name
             password: Database password
-            username: Database username (default: postgres)
-            db_type: Database type (default: postgresql)
+            username: Database username (async default: postgres)
+            db_type: Database type (async default: postgresql)
         """
         self.host = os.getenv("DB_HOST")
         self.port = os.getenv("DB_PORT")

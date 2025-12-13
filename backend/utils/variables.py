@@ -13,7 +13,7 @@ class Participant(BaseModel):
 
 class Event(BaseModel):
     name: str
-    description: str
+    description: str | None = None
     event_type: int
 
 class Activity(BaseModel):

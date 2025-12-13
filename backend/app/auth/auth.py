@@ -18,19 +18,34 @@ async def login(user: UserLogin):
     
     db_user = db_user[0]
     
-    if not verify_password(user.password, db_user["password"]):
+    if not await verify_password(user.password, db_user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    access_token = create_access_token(
+    access_token = await create_access_token(
         data={"sub": db_user["name"], "user_id": db_user["id"]},
         expires_delta=timedelta(minutes=30)
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
 
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify token validity without fetching user from database"""
+    token = credentials.credentials
+    payload = await decode_access_token(token)
+    
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    name = payload.get("sub")
+    if name is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    # Token is valid, return True or minimal info
+    return True
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
-    payload = decode_access_token(token)
+    payload = await decode_access_token(token)
     
     if payload is None:
         raise HTTPException(status_code=401, detail="Invalid token")

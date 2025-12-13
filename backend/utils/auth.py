@@ -16,13 +16,13 @@ pwd_context = CryptContext(
     deprecated="auto"
 )
 
-def hash_password(password: str) -> str:
+async def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+async def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -32,15 +32,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def decode_access_token(token: str):
+async def decode_access_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except JWTError:
         return None
 
-def is_token_expired(token: str) -> bool:
-    payload = decode_access_token(token)
+async def is_token_expired(token: str) -> bool:
+    payload = await decode_access_token(token)
     if payload is None:
         return True
     exp = payload.get("exp")
@@ -48,6 +48,6 @@ def is_token_expired(token: str) -> bool:
         return True
     return datetime.utcnow() > datetime.fromtimestamp(exp)
 
-def check_expiry_date(expiry_date: datetime) -> bool:
+async def check_expiry_date(expiry_date: datetime) -> bool:
     return datetime.utcnow() < expiry_date
 
