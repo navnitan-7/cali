@@ -633,21 +633,26 @@ export default function CreateEventScreen() {
     }
   };
 
-  const onSubmit = (data: FormData) => {
-    if (isEditMode && eventId && tournamentId) {
-      updateEvent(tournamentId, eventId, {
-        ...data,
-        participantIds: selectedParticipantIds,
-        status: new Date(data.date) > new Date() ? 'upcoming' : 'active',
-      });
-      router.back();
-    } else if (tournamentId) {
-      addEvent(tournamentId, {
-        ...data,
-        participantIds: selectedParticipantIds,
-        status: new Date(data.date) > new Date() ? 'upcoming' : 'active',
-      });
-      router.back();
+  const onSubmit = async (data: FormData) => {
+    try {
+      if (isEditMode && eventId && tournamentId) {
+        updateEvent(tournamentId, eventId, {
+          ...data,
+          participantIds: selectedParticipantIds,
+          status: new Date(data.date) > new Date() ? 'upcoming' : 'active',
+        });
+        router.back();
+      } else if (tournamentId) {
+        await addEvent(tournamentId, {
+          ...data,
+          participantIds: selectedParticipantIds,
+          status: new Date(data.date) > new Date() ? 'upcoming' : 'active',
+        });
+        router.back();
+      }
+    } catch (error) {
+      console.error('Error creating event:', error);
+      // You might want to show an error message to the user here
     }
   };
 

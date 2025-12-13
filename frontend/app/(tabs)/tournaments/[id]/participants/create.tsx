@@ -37,19 +37,23 @@ export default function CreateParticipantScreen() {
     );
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) {
       Alert.alert('Error', 'Name is required');
       return;
     }
 
-    addParticipant(tournamentId!, {
-      name: name.trim(),
-      weight: weight ? parseFloat(weight) : undefined,
-      division: division || undefined,
-    });
-
-    router.back();
+    try {
+      await addParticipant(tournamentId!, {
+        name: name.trim(),
+        weight: weight ? parseFloat(weight) : undefined,
+        division: division || undefined,
+      });
+      router.back();
+    } catch (error) {
+      console.error('Error creating participant:', error);
+      Alert.alert('Error', 'Failed to create participant. Please try again.');
+    }
   };
 
   const canSave = name.trim().length > 0;

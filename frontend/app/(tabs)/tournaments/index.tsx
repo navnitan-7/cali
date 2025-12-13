@@ -143,8 +143,7 @@ export default function TournamentsScreen() {
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
-  const { tournaments } = useTournamentStore();
-  const { syncEventsFromBackend } = useEventStore();
+  const { tournaments, syncEventsFromBackend } = useTournamentStore();
   const [showTopFade, setShowTopFade] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);

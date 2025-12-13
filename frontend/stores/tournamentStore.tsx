@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { EventDataWithId } from '../schemas/eventModal';
 import { eventService, participantService } from '../services';
-import { useEventStore } from './eventStore';
 
 interface Participant {
   id: string;
@@ -72,7 +71,8 @@ interface Tournament {
 
 interface TournamentStore {
   tournaments: Tournament[];
-  addTournament: (tournament: Omit<Tournament, 'id' | 'participants' | 'events' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  syncEventsFromBackend: () => Promise<void>;
+  addTournament: (tournament: Omit<Tournament, 'id' | 'participants' | 'events' | 'createdAt' | 'updatedAt'>) => string;
   updateTournament: (id: string, updates: Partial<Tournament>) => void;
   deleteTournament: (id: string) => void;
   getTournament: (id: string) => Tournament | undefined;
@@ -84,7 +84,7 @@ interface TournamentStore {
   getParticipant: (tournamentId: string, participantId: string) => Participant | undefined;
   
   // Event management
-  addEvent: (tournamentId: string, event: Omit<Event, 'id' | 'createdAt' | 'updatedAt'>) => string;
+  addEvent: (tournamentId: string, event: Omit<Event, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updateEvent: (tournamentId: string, eventId: string, updates: Partial<Event>) => void;
   deleteEvent: (tournamentId: string, eventId: string) => void;
   getEvent: (tournamentId: string, eventId: string) => Event | undefined;
@@ -184,6 +184,126 @@ export const useTournamentStore = create<TournamentStore>()(
     (set, get) => ({
       tournaments: getDefaultTournaments(),
       
+      syncEventsFromBackend: async () => {
+        try {
+          console.log('[TournamentStore] Syncing events from backend...');
+          const backendEvents = await eventService.getEvents();
+          console.log('[TournamentStore] Received events from backend:', backendEvents);
+          
+          // Get all participants from backend
+          const backendParticipants = await participantService.getParticipants();
+          console.log('[TournamentStore] Received participants from backend:', backendParticipants);
+          
+          // For each event, get its participants
+          const eventsWithParticipants = await Promise.all(
+            backendEvents.map(async (be: any) => {
+              try {
+                const eventParticipants = await participantService.getParticipantsByEvent(be.id);
+                return {
+                  event: be,
+                  participants: eventParticipants,
+                };
+              } catch (error) {
+                console.error(`[TournamentStore] Error fetching participants for event ${be.id}:`, error);
+                return {
+                  event: be,
+                  participants: [],
+                };
+              }
+            })
+          );
+          
+          // Transform backend events to tournament event format
+          const transformedEvents: Event[] = eventsWithParticipants.map(({ event: be, participants: eventParticipants }) => {
+            return {
+              id: be.id.toString(),
+              name: be.name,
+              date: new Date().toISOString().split('T')[0], // Default date
+              category: be.event_type || 'Other',
+              divisions: ['Open'],
+              metrics: ['time', 'reps'],
+              participantIds: eventParticipants.map((p: any) => p.id?.toString() || p.participant_id?.toString()).filter(Boolean),
+              participantData: {},
+              status: 'upcoming',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+          });
+          
+          // Transform backend participants to tournament participant format (deduplicate)
+          const participantMap = new Map<string, Participant>();
+          backendParticipants.forEach((bp: any) => {
+            const id = bp.id.toString();
+            if (!participantMap.has(id)) {
+              participantMap.set(id, {
+                id,
+                name: bp.name,
+                weight: bp.weight,
+                division: bp.gender || 'Open',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          });
+          const transformedParticipants = Array.from(participantMap.values());
+          
+          // Update tournaments - add events and participants to the first tournament (or create a default one)
+          set((state) => {
+            const tournaments = [...state.tournaments];
+            
+            // If no tournaments, create a default one
+            if (tournaments.length === 0) {
+              const now = new Date().toISOString();
+              tournaments.push({
+                id: '1',
+                name: 'My Tournament',
+                date: new Date().toISOString().split('T')[0],
+                participants: transformedParticipants,
+                events: transformedEvents,
+                status: 'active',
+                createdAt: now,
+                updatedAt: now,
+              });
+            } else {
+              // Update first tournament with synced events and participants
+              // Merge participants (avoid duplicates by ID)
+              const existingParticipantIds = new Set(tournaments[0].participants.map(p => p.id));
+              const newParticipants = transformedParticipants.filter(p => !existingParticipantIds.has(p.id));
+              
+              // Replace events with backend events (merge participantIds from existing events if needed)
+              const existingEventsMap = new Map(tournaments[0].events.map(e => [e.id, e]));
+              const updatedEvents = transformedEvents.map(backendEvent => {
+                const existingEvent = existingEventsMap.get(backendEvent.id);
+                return {
+                  ...backendEvent,
+                  participantIds: existingEvent?.participantIds || backendEvent.participantIds,
+                  participantData: existingEvent?.participantData || backendEvent.participantData,
+                };
+              });
+              
+              // Add any events that exist locally but not in backend (preserve them)
+              const backendEventIds = new Set(transformedEvents.map(e => e.id));
+              const localOnlyEvents = tournaments[0].events.filter(e => !backendEventIds.has(e.id));
+              
+              tournaments[0] = {
+                ...tournaments[0],
+                participants: [...tournaments[0].participants.filter(p => 
+                  transformedParticipants.some(tp => tp.id === p.id)
+                ), ...newParticipants],
+                events: [...updatedEvents, ...localOnlyEvents],
+                updatedAt: new Date().toISOString(),
+              };
+            }
+            
+            return { tournaments };
+          });
+          
+          console.log('[TournamentStore] Events and participants synced successfully');
+        } catch (error) {
+          console.error('[TournamentStore] Error syncing from backend:', error);
+        }
+      },
+      
       addTournament: (tournament) => {
         const id = Date.now().toString() + Math.random().toString(36).substring(7);
         const now = new Date().toISOString();
@@ -222,45 +342,105 @@ export const useTournamentStore = create<TournamentStore>()(
       },
       
       // Participant management
-      addParticipant: (tournamentId, participant) => {
-        const id = Date.now().toString() + Math.random().toString(36).substring(7);
-        const now = new Date().toISOString();
-        const newParticipant: Participant = {
-          ...participant,
-          id,
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((state) => ({
-          tournaments: state.tournaments.map((tournament) =>
-            tournament.id === tournamentId
-              ? {
-                  ...tournament,
-                  participants: [...tournament.participants, newParticipant],
-                  updatedAt: new Date().toISOString(),
-                }
-              : tournament
-          ),
-        }));
-        return id;
+      addParticipant: async (tournamentId, participant) => {
+        try {
+          // Get all events for this tournament to get their IDs
+          const tournament = get().tournaments.find(t => t.id === tournamentId);
+          if (!tournament) {
+            throw new Error('Tournament not found');
+          }
+
+          // Get event IDs from tournament events (map string IDs to numbers)
+          const eventIds = tournament.events.map(e => parseInt(e.id)).filter(id => !isNaN(id));
+
+          // Call backend API to create participant
+          const result = await participantService.createParticipant({
+            name: participant.name,
+            age: 0, // Default - update if you have age field
+            gender: participant.division || 'Open',
+            weight: participant.weight || 0,
+            phone: '', // Add if needed
+            country: '', // Add if needed
+            state: '', // Add if needed
+            event_id: eventIds.length > 0 ? eventIds : [], // Link to all events in tournament
+          });
+
+          const id = result.participant_id.toString();
+          const now = new Date().toISOString();
+          const newParticipant: Participant = {
+            ...participant,
+            id,
+            createdAt: now,
+            updatedAt: now,
+          };
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) =>
+              tournament.id === tournamentId
+                ? {
+                    ...tournament,
+                    participants: [...tournament.participants, newParticipant],
+                    updatedAt: new Date().toISOString(),
+                  }
+                : tournament
+            ),
+          }));
+          
+          // Sync from backend to ensure UI is updated
+          get().syncEventsFromBackend().catch(err => {
+            console.error('[TournamentStore] Error syncing after participant creation:', err);
+          });
+          
+          return id;
+        } catch (error) {
+          console.error('[TournamentStore] Error creating participant:', error);
+          throw error;
+        }
       },
       
-      updateParticipant: (tournamentId, participantId, updates) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((tournament) =>
-            tournament.id === tournamentId
-              ? {
-                  ...tournament,
-                  participants: tournament.participants.map((p) =>
-                    p.id === participantId
-                      ? { ...p, ...updates, updatedAt: new Date().toISOString() }
-                      : p
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : tournament
-          ),
-        }));
+      updateParticipant: async (tournamentId, participantId, updates) => {
+        try {
+          // Get current participant data
+          const tournament = get().tournaments.find(t => t.id === tournamentId);
+          const currentParticipant = tournament?.participants.find(p => p.id === participantId);
+          
+          if (!currentParticipant) {
+            throw new Error('Participant not found');
+          }
+
+          // Get all events for this tournament to get their IDs
+          const eventIds = tournament?.events.map(e => parseInt(e.id)).filter(id => !isNaN(id)) || [];
+
+          // Call backend API to update participant
+          await participantService.updateParticipant(parseInt(participantId), {
+            name: updates.name || currentParticipant.name,
+            age: 0, // Default - update if you have age field
+            gender: updates.division || currentParticipant.division || 'Open',
+            weight: updates.weight !== undefined ? (updates.weight || 0) : (currentParticipant.weight || 0),
+            phone: '', // Add if needed
+            country: '', // Add if needed
+            state: '', // Add if needed
+          });
+
+          // Update local state
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) =>
+              tournament.id === tournamentId
+                ? {
+                    ...tournament,
+                    participants: tournament.participants.map((p) =>
+                      p.id === participantId
+                        ? { ...p, ...updates, updatedAt: new Date().toISOString() }
+                        : p
+                    ),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : tournament
+            ),
+          }));
+        } catch (error) {
+          console.error('[TournamentStore] Error updating participant:', error);
+          throw error;
+        }
       },
       
       deleteParticipant: (tournamentId, participantId) => {
@@ -292,29 +472,64 @@ export const useTournamentStore = create<TournamentStore>()(
       },
       
       // Event management
-      addEvent: (tournamentId, event) => {
-        const id = Date.now().toString() + Math.random().toString(36).substring(7);
-        const now = new Date().toISOString();
-        const newEvent: Event = {
-          ...event,
-          id,
-          participantIds: event.participantIds || [],
-          participantData: {},
-          createdAt: now,
-          updatedAt: now,
-        };
-        set((state) => ({
-          tournaments: state.tournaments.map((tournament) =>
-            tournament.id === tournamentId
-              ? {
-                  ...tournament,
-                  events: [...tournament.events, newEvent],
-                  updatedAt: new Date().toISOString(),
-                }
-              : tournament
-          ),
-        }));
-        return id;
+      addEvent: async (tournamentId, event) => {
+        try {
+          // Get event types from backend to map category to event_type ID
+          const eventTypes = await eventService.getEventTypes();
+          
+          // Find event type by name (category)
+          let eventTypeId = 1; // Default to first event type
+          const eventType = eventTypes.find(et => et.name === event.category);
+          if (eventType) {
+            eventTypeId = eventType.id;
+          } else if (eventTypes.length > 0) {
+            // If category doesn't match, use first available event type
+            eventTypeId = eventTypes[0].id;
+          }
+
+          // Call backend API to create event
+          const result = await eventService.createEvent({
+            name: event.name,
+            description: event.name, // Use name as description if no description field
+            event_type: eventTypeId,
+          });
+
+          // After creating, fetch all events to get the new event ID
+          const backendEvents = await eventService.getEvents();
+          const newBackendEvent = backendEvents[backendEvents.length - 1]; // Get the last one (newly created)
+          
+          const id = newBackendEvent.id.toString();
+          const now = new Date().toISOString();
+          const newEvent: Event = {
+            ...event,
+            id,
+            participantIds: event.participantIds || [],
+            participantData: {},
+            createdAt: now,
+            updatedAt: now,
+          };
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) =>
+              tournament.id === tournamentId
+                ? {
+                    ...tournament,
+                    events: [...tournament.events, newEvent],
+                    updatedAt: new Date().toISOString(),
+                  }
+                : tournament
+            ),
+          }));
+          
+          // Sync events from backend to ensure UI is updated
+          get().syncEventsFromBackend().catch(err => {
+            console.error('[TournamentStore] Error syncing after event creation:', err);
+          });
+          
+          return id;
+        } catch (error) {
+          console.error('[TournamentStore] Error creating event:', error);
+          throw error;
+        }
       },
       
       updateEvent: (tournamentId, eventId, updates) => {

@@ -31,7 +31,7 @@ interface EventStore {
   syncParticipantsFromBackend: (eventId: string) => Promise<void>;
   
   // Local methods
-  addEvent: (event: EventDataWithId) => string; // Returns event ID
+  addEvent: (event: EventDataWithId) => Promise<string>; // Returns event ID
   updateEvent: (id: string, event: Partial<EventDataWithId>) => void;
   deleteEvent: (id: string) => void;
   addParticipant: (eventId: string, participant: Omit<Participant, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
@@ -203,21 +203,55 @@ export const useEventStore = create<EventStore>()(
           set({ error: error.message || 'Failed to sync participants', isLoading: false });
         }
       },
-      addEvent: (event) => {
-        const id = Date.now().toString() + Math.random().toString(36).substring(7);
-        const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const newEvent: EventWithParticipants = {
-          ...event,
-          id,
-          participants: [],
-          participantCount: 0,
-          status: event.status || 'upcoming',
-          joinCode,
-        };
-        set((state) => ({
-          events: [...state.events, newEvent],
-        }));
-        return id;
+      addEvent: async (event) => {
+        try {
+          set({ isLoading: true, error: null });
+          console.log('[EventStore] Creating event in backend:', event);
+          
+          // Get event types from backend to map category to event_type ID
+          const eventTypes = await eventService.getEventTypes();
+          
+          // Find event type by name (category)
+          let eventTypeId = 1; // Default to first event type
+          const eventType = eventTypes.find(et => et.name === event.category);
+          if (eventType) {
+            eventTypeId = eventType.id;
+          } else if (eventTypes.length > 0) {
+            // If category doesn't match, use first available event type
+            eventTypeId = eventTypes[0].id;
+          }
+
+          // Call backend API to create event
+          await eventService.createEvent({
+            name: event.name,
+            description: event.name, // Use name as description if no description field
+            event_type: eventTypeId,
+          });
+
+          // After creating, fetch all events to get the new event ID
+          const backendEvents = await eventService.getEvents();
+          const newBackendEvent = backendEvents[backendEvents.length - 1]; // Get the last one (newly created)
+          
+          const id = newBackendEvent.id.toString();
+          const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+          const newEvent: EventWithParticipants = {
+            ...event,
+            id,
+            participants: [],
+            participantCount: 0,
+            status: event.status || 'upcoming',
+            joinCode,
+          };
+          set((state) => ({
+            events: [...state.events, newEvent],
+            isLoading: false,
+          }));
+          return id;
+        } catch (error: any) {
+          console.error('[EventStore] Error creating event:', error);
+          set({ error: error.message || 'Failed to create event', isLoading: false });
+          throw error;
+        }
       },
       updateEvent: (id, updates) => {
         set((state) => ({
