@@ -1,1 +1,10 @@
 fastapi
+gspread
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+sqlalchemy
+python-dotenv
+uvicorn
+passlib[bcrypt]
+python-jose[cryptography]

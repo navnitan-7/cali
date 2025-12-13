@@ -1,11 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from utils.db import db
 from utils.variables import Event
-from fastapi import HTTPException
+from app.auth.auth import get_current_user
+
 router = APIRouter(prefix="/events", tags=["events"])
 
 @router.post("/create")
-def create_event(event: Event):
+def create_event(event: Event, current_user: dict = Depends(get_current_user)):
     try:
         print(event.name, event.description, event.event_type)
         db.execute_action("INSERT INTO cali_db.events (name, description, event_type) VALUES (:name, :description, :event_type)", {"name": event.name, "description": event.description, "event_type": event.event_type})
@@ -14,7 +15,7 @@ def create_event(event: Event):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/get")
-def get_events():
+def get_events(current_user: dict = Depends(get_current_user)):
     return db.read("""
             SELECT events.id, events.name, events.description, et.name as event_type 
             FROM cali_db.events events
@@ -22,11 +23,11 @@ def get_events():
     """)
 
 @router.get("/list_event_type")
-def get_event_types():
+def get_event_types(current_user: dict = Depends(get_current_user)):
     return db.read("SELECT * FROM cali_db.event_type")
 
 @router.get("/by_participant/{id}")
-def get_events_by_participant(id: int):
+def get_events_by_participant(id: int, current_user: dict = Depends(get_current_user)):
     return db.read("""
         SELECT events.id, events.name, events.description, et.name as event_type, pe.event_id, pe.participant_id 
         FROM cali_db.events events
@@ -36,7 +37,7 @@ def get_events_by_participant(id: int):
     """, {"id": id})
 
 @router.get("/get/{id}")
-def get_event(id: int):
+def get_event(id: int, current_user: dict = Depends(get_current_user)):
     return db.read("""
         SELECT events.id, events.name, events.description, et.name as event_type 
         FROM cali_db.events events

@@ -1,51 +1,45 @@
 {
   "expo": {
-    "name": "Cali Competition",
-    "slug": "cali-competition",
+    "name": "RepX",
+    "slug": "RepX",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "icon": "./assets/images/icon.png",
+    "scheme": "repx",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": false,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.cali.competition"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.cali.competition"
+      "edgeToEdgeEnabled": true
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
       [
-        "expo-camera",
+        "expo-splash-screen",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera for recording attempts."
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
         }
       ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos for uploading videos.",
-          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save videos."
-        }
-      ]
+      "expo-font"
     ],
-    "scheme": "cali"
+    "experiments": {
+      "typedRoutes": true
+    },
+    "assetBundlePatterns": [
+      "assets/fonts/*"
+    ]
   }
 }
