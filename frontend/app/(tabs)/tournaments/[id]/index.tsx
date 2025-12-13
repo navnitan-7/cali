@@ -1,10 +1,9 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '../../../../stores/themeStore';
 import { useColors } from '../../../../utils/colors';
@@ -25,59 +24,53 @@ export default function TournamentDetailScreen() {
   const [activeTab, setActiveTab] = useState('Events');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [hasSyncedEvents, setHasSyncedEvents] = useState(false);
-  const [hasSyncedParticipants, setHasSyncedParticipants] = useState(false);
-
+  
   const tournamentId = Array.isArray(id) ? id[0] : id;
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
+  
+  // Track if initial load has happened for this tournament
+  const initialLoadRef = useRef<string | null>(null);
+  const hasLoadedEventsRef = useRef(false);
+  const hasLoadedParticipantsRef = useRef(false);
 
-  // Sync events when Events tab is opened (only once per tab switch)
+  // Initialize ref on mount or when tournamentId changes
+  if (tournamentId && initialLoadRef.current !== tournamentId) {
+    initialLoadRef.current = tournamentId;
+    hasLoadedEventsRef.current = false;
+    hasLoadedParticipantsRef.current = false;
+  }
+
+  // Initial load on first visit - Events tab
   useEffect(() => {
-    if (activeTab === 'Events' && tournamentId && !hasSyncedEvents) {
+    if (activeTab === 'Events' && tournamentId && !hasLoadedEventsRef.current && initialLoadRef.current === tournamentId) {
       const { isLoadingEvents } = useTournamentStore.getState();
       // Only sync if not already loading (request deduplication)
       if (!isLoadingEvents) {
-        console.log('[TournamentDetailScreen] Events tab opened - syncing events...');
+        console.log('[TournamentDetailScreen] First visit - loading events...');
         syncEventsOnly(tournamentId).then(() => {
-          setHasSyncedEvents(true);
+          hasLoadedEventsRef.current = true;
         }).catch(error => {
           console.error('[TournamentDetailScreen] Failed to sync events:', error);
         });
       }
     }
-  }, [activeTab, tournamentId, hasSyncedEvents, syncEventsOnly]);
+  }, [activeTab, tournamentId, syncEventsOnly]);
 
-  // Refresh events when screen comes into focus (e.g., after creating a new event)
-  useFocusEffect(
-    useCallback(() => {
-      if (activeTab === 'Events' && tournamentId) {
-        const { isLoadingEvents } = useTournamentStore.getState();
-        // Refresh events when screen is focused (but don't set hasSyncedEvents to avoid blocking)
-        if (!isLoadingEvents) {
-          console.log('[TournamentDetailScreen] Screen focused - refreshing events...');
-          syncEventsOnly(tournamentId).catch(error => {
-            console.error('[TournamentDetailScreen] Failed to refresh events:', error);
-          });
-        }
-      }
-    }, [activeTab, tournamentId, syncEventsOnly])
-  );
-
-  // Sync participants when Participants tab is opened (only once per tab switch)
+  // Initial load on first visit - Participants tab
   useEffect(() => {
-    if (activeTab === 'Participants' && tournamentId && !hasSyncedParticipants) {
+    if (activeTab === 'Participants' && tournamentId && !hasLoadedParticipantsRef.current && initialLoadRef.current === tournamentId) {
       const { isLoadingParticipants } = useTournamentStore.getState();
       // Only sync if not already loading (request deduplication)
       if (!isLoadingParticipants) {
-        console.log('[TournamentDetailScreen] Participants tab opened - syncing participants...');
+        console.log('[TournamentDetailScreen] First visit - loading participants...');
         syncParticipantsOnly(tournamentId).then(() => {
-          setHasSyncedParticipants(true);
+          hasLoadedParticipantsRef.current = true;
         }).catch(error => {
           console.error('[TournamentDetailScreen] Failed to sync participants:', error);
         });
       }
     }
-  }, [activeTab, tournamentId, hasSyncedParticipants, syncParticipantsOnly]);
+  }, [activeTab, tournamentId, syncParticipantsOnly]);
 
   // Get tournament accent color
   const accent = useMemo(() => {
@@ -85,6 +78,28 @@ export default function TournamentDetailScreen() {
     const baseAccent = getTournamentAccent(tournament.name, tournament.description);
     return isDark ? getTournamentAccentDark(baseAccent) : baseAccent;
   }, [tournament, isDark]);
+
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(() => {
+    if (!tournamentId) return;
+    
+    // Don't refresh if already loading
+    if (isLoadingEvents || isLoadingParticipants) return;
+    
+    // Refresh based on active tab
+    if (activeTab === 'Events') {
+      syncEventsOnly(tournamentId).catch(error => {
+        console.error('[TournamentDetailScreen] Failed to refresh events:', error);
+      });
+    } else if (activeTab === 'Participants') {
+      syncParticipantsOnly(tournamentId).catch(error => {
+        console.error('[TournamentDetailScreen] Failed to refresh participants:', error);
+      });
+    }
+  }, [tournamentId, activeTab, isLoadingEvents, isLoadingParticipants, syncEventsOnly, syncParticipantsOnly]);
+  
+  // Determine if currently refreshing
+  const isRefreshing = isLoadingEvents || isLoadingParticipants;
 
   if (!tournament) {
     return (
@@ -407,6 +422,13 @@ export default function TournamentDetailScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={accent?.primary || colors['bg-primary']}
+            />
+          }
         >
           {/* Lightweight Tabs with Accent */}
           <TabSwitch

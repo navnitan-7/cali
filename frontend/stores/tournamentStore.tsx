@@ -82,7 +82,7 @@ interface TournamentStore {
   syncEventsFromBackend: () => Promise<void>;
   syncEventsOnly: (tournamentId: string) => Promise<void>;
   syncParticipantsOnly: (tournamentId: string) => Promise<void>;
-  syncEventDetails: (tournamentId: string, eventId: string) => Promise<void>;
+  syncEventDetails: (tournamentId: string, eventId: string, forceRefresh?: boolean) => Promise<void>;
   addTournament: (tournament: Omit<Tournament, 'id' | 'participants' | 'events' | 'createdAt' | 'updatedAt'>) => string;
   updateTournament: (id: string, updates: Partial<Tournament>) => void;
   deleteTournament: (id: string) => void;
@@ -462,7 +462,20 @@ export const useTournamentStore = create<TournamentStore>()(
         return syncPromise;
       },
       
-      syncEventDetails: async (tournamentId: string, eventId: string) => {
+      syncEventDetails: async (tournamentId: string, eventId: string, forceRefresh: boolean = false) => {
+        // If force refresh (pull-to-refresh), always proceed with API call
+        if (!forceRefresh) {
+          // Check if we already have participantIds for this event (from previous load)
+          const tournament = get().tournaments.find(t => t.id === tournamentId);
+          const event = tournament?.events.find(e => e.id === eventId);
+          // Only skip if event has participantIds AND it was explicitly set (not just empty array from initial state)
+          // We check if the event has been updated after creation, indicating it was loaded via API
+          if (event && event.participantIds !== undefined && event.updatedAt && event.updatedAt !== event.createdAt) {
+            console.log('[TournamentStore] Event already loaded via by_event API, skipping:', eventId);
+            return Promise.resolve();
+          }
+        }
+        
         // If already syncing this event, return the existing promise
         const existingPromise = get().syncEventDetailsPromises[eventId];
         if (existingPromise) {

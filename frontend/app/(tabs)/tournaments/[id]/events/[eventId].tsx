@@ -1,8 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '../../../../../stores/themeStore';
 import { useColors } from '../../../../../utils/colors';
@@ -13,11 +12,14 @@ import ConfirmDialog from '../../../../../components/ui/ConfirmDialog';
 import { getTournamentAccent, getTournamentAccentDark } from '../../../../../utils/tournamentAccent';
 
 export default function EventDetailScreen() {
-  const { id: tournamentId, eventId } = useLocalSearchParams<{ id: string; eventId: string }>();
+  const { id, eventId: eventIdParam } = useLocalSearchParams<{ id: string; eventId: string }>();
   const theme = useTheme();
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
+  
+  const tournamentId = Array.isArray(id) ? id[0] : id;
+  const eventId = Array.isArray(eventIdParam) ? eventIdParam[0] : eventIdParam;
   const { 
     getTournament, 
     getEvent, 
@@ -29,28 +31,41 @@ export default function EventDetailScreen() {
   const [activeTab, setActiveTab] = useState('Participants');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-  const [hasSyncedEventDetails, setHasSyncedEventDetails] = useState(false);
 
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
   const event = tournamentId && eventId ? getEvent(tournamentId, eventId) : undefined;
 
-  // Sync event details when screen opens (only once)
-  useFocusEffect(
-    useCallback(() => {
-      if (tournamentId && eventId && !hasSyncedEventDetails) {
-        const { isLoadingEventDetails } = useTournamentStore.getState();
-        // Only sync if not already loading this event (request deduplication)
-        if (!isLoadingEventDetails[eventId]) {
-          console.log('[EventDetailScreen] Screen focused - syncing event details...');
-          syncEventDetails(tournamentId, eventId).then(() => {
-            setHasSyncedEventDetails(true);
-          }).catch(error => {
-            console.error('[EventDetailScreen] Failed to sync event details:', error);
-          });
-        }
+  // Track if initial load has happened for this event
+  const initialLoadRef = useRef<string | null>(null);
+  const hasLoadedEventDetailsRef = useRef(false);
+
+  // Initialize ref on mount or when eventId changes
+  useEffect(() => {
+    const currentEventKey = tournamentId && eventId ? `${tournamentId}-${eventId}` : null;
+    if (currentEventKey && initialLoadRef.current !== currentEventKey) {
+      initialLoadRef.current = currentEventKey;
+      hasLoadedEventDetailsRef.current = false;
+    }
+  }, [tournamentId, eventId]);
+
+  // Initial load ONLY when event is first opened (chosen by user)
+  useEffect(() => {
+    const currentEventKey = tournamentId && eventId ? `${tournamentId}-${eventId}` : null;
+    // Only load if this is a new event (different from previously loaded)
+    // and we haven't loaded it yet in this session
+    if (tournamentId && eventId && initialLoadRef.current === currentEventKey && !hasLoadedEventDetailsRef.current) {
+      const { isLoadingEventDetails } = useTournamentStore.getState();
+      // Only sync if not already loading this event (request deduplication)
+      if (!isLoadingEventDetails[eventId]) {
+        console.log('[EventDetailScreen] Event chosen - loading participants via by_event API...');
+        syncEventDetails(tournamentId, eventId).then(() => {
+          hasLoadedEventDetailsRef.current = true;
+        }).catch(error => {
+          console.error('[EventDetailScreen] Failed to sync event details:', error);
+        });
       }
-    }, [tournamentId, eventId, hasSyncedEventDetails, syncEventDetails])
-  );
+    }
+  }, [tournamentId, eventId, syncEventDetails]);
 
   // Get tournament accent color
   const accent = useMemo(() => {
@@ -58,6 +73,24 @@ export default function EventDetailScreen() {
     const baseAccent = getTournamentAccent(tournament.name, tournament.description);
     return isDark ? getTournamentAccentDark(baseAccent) : baseAccent;
   }, [tournament, isDark]);
+
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(() => {
+    if (!tournamentId || !eventId) return;
+    
+    // Don't refresh if already loading
+    const { isLoadingEventDetails } = useTournamentStore.getState();
+    if (isLoadingEventDetails[eventId]) return;
+    
+    console.log('[EventDetailScreen] Pull to refresh - syncing event details...');
+    // Force refresh on pull-to-refresh
+    syncEventDetails(tournamentId, eventId, true).catch(error => {
+      console.error('[EventDetailScreen] Failed to refresh event details:', error);
+    });
+  }, [tournamentId, eventId, syncEventDetails]);
+  
+  // Determine if currently refreshing
+  const isRefreshing = isLoadingEventDetails[eventId] || false;
 
   // Get participants for this event with their event-specific data
   const eventParticipants = useMemo(() => {
@@ -569,6 +602,13 @@ export default function EventDetailScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={accent?.primary || colors['bg-primary']}
+            />
+          }
         >
           {/* Lightweight Tabs with Accent */}
           <TabSwitch
