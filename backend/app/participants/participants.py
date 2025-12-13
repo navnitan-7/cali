@@ -37,6 +37,8 @@ def get_participants_by_event(id: int):
         SELECT p.*, pe.event_id, pe.participant_id 
         FROM cali_db.participants p
         INNER JOIN cali_db.participants_events pe ON p.id = pe.participant_id
+        INNER JOIN cali_db.events e ON pe.event_id = e.id
+        INNER JOIN cali_db.event_type et ON e.event_type = et.id 
         WHERE pe.event_id = :id
     """, {"id": id})
 
