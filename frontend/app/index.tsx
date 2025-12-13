@@ -7,15 +7,26 @@ import { useColors } from '../utils/colors';
 import { getFontFamily } from '../utils/fonts';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../stores/authStore';
+import { useEventTypesStore } from '../stores/eventTypesStore';
 
 export default function SplashScreen() {
   const isDark = useIsDark();
   const colors = useColors(isDark);
   const { isAuthenticated, checkAuth } = useAuthStore();
+  const { fetchEventTypes } = useEventTypesStore();
 
   useEffect(() => {
-    const initializeAuth = async () => {
+    const initializeApp = async () => {
+      // Check authentication
       await checkAuth();
+      
+      // Fetch and cache event types (only if authenticated)
+      // Don't await - let it fetch in background
+      if (isAuthenticated) {
+        fetchEventTypes().catch((error) => {
+          console.error('Error fetching event types on startup:', error);
+        });
+      }
       
       // Navigate based on auth state after check completes
       setTimeout(() => {
@@ -27,7 +38,7 @@ export default function SplashScreen() {
       }, 1000);
     };
 
-    initializeAuth();
+    initializeApp();
   }, []);
 
   return (

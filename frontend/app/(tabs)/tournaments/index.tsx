@@ -1,15 +1,15 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../../stores/themeStore';
 import { router } from 'expo-router';
 import FloatingActionButton from '../../../components/ui/FloatingActionButton';
 import { useColors } from '../../../utils/colors';
 import { getFontFamily } from '../../../utils/fonts';
 import { useTournamentStore } from '../../../stores/tournamentStore';
-import { useEventStore } from '../../../stores/eventStore';
 import { getTournamentAccent, getTournamentAccentDark } from '../../../utils/tournamentAccent';
 
 function formatDate(dateString: string) {
@@ -148,13 +148,22 @@ export default function TournamentsScreen() {
   const [showBottomFade, setShowBottomFade] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Sync events from backend when component mounts
-  useEffect(() => {
-    console.log('[TournamentsScreen] Syncing events from backend...');
-    syncEventsFromBackend().catch(error => {
-      console.error('[TournamentsScreen] Failed to sync events:', error);
-    });
-  }, []);
+  // Sync events from backend only once when screen first comes into focus
+  // Request deduplication in store prevents multiple simultaneous calls
+  useFocusEffect(
+    useCallback(() => {
+      const { isLoadingEvents } = useTournamentStore.getState();
+      // Only sync if not already loading (prevents duplicate calls on rapid navigation)
+      if (!isLoadingEvents) {
+        console.log('[TournamentsScreen] Screen focused - syncing events from backend...');
+        syncEventsFromBackend().catch(error => {
+          console.error('[TournamentsScreen] Failed to sync events:', error);
+        });
+      } else {
+        console.log('[TournamentsScreen] Sync already in progress, skipping');
+      }
+    }, [syncEventsFromBackend])
+  );
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;

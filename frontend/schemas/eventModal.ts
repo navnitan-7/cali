@@ -7,10 +7,6 @@ export const eventSchema = z.object({
     .max(100, 'Event name must be less than 100 characters'),
   category: z.string()
     .min(1, 'Category is required'),
-  date: z.string()
-    .min(1, 'Date is required'),
-  divisions: z.array(z.string()).optional().default([]),
-  metrics: z.array(z.enum(['time', 'weight', 'reps'])).optional().default([]),
 });
 
 export type EventData = z.infer<typeof eventSchema>;
@@ -26,9 +22,6 @@ export interface EventDataWithId extends EventData {
 export const eventDefaults: EventData = {
   name: '',
   category: '',
-  date: new Date().toISOString().split('T')[0],
-  divisions: [],
-  metrics: [],
 };
 
 // Event categories

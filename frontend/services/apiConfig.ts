@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 
 // Determine the API base URL based on platform
 const getApiBaseUrl = () => {
@@ -109,8 +110,43 @@ class ApiClient {
           data: error.response?.data,
         });
         if (error.response?.status === 401) {
-          console.log('[API Response] 401 Unauthorized - removing token');
-          await storage.removeItem('auth_token');
+          const requestUrl = error.config?.url || '';
+          // Don't logout if 401 is from login/register endpoints (invalid credentials)
+          const isAuthEndpoint = requestUrl.includes('/auth/login') || 
+                                requestUrl.includes('/auth/register') ||
+                                requestUrl === '/auth/login' ||
+                                requestUrl === '/auth/register';
+          
+          if (!isAuthEndpoint) {
+            // Check if user is authenticated BEFORE removing token
+            // Using dynamic import to avoid circular dependency
+            try {
+              const { useAuthStore } = await import('../stores/authStore');
+              const { isAuthenticated, logout } = useAuthStore.getState();
+              
+              // Only logout if user is actually authenticated (not during login flow)
+              if (isAuthenticated) {
+                console.log('[API Response] 401 Unauthorized - token expired, logging out');
+                
+                // Call logout which will remove token and clear state
+                await logout();
+                
+                // Navigate to login page
+                setTimeout(() => {
+                  try {
+                    router.replace('/login');
+                  } catch (navError) {
+                    console.error('[API Response] Navigation error:', navError);
+                  }
+                }, 100);
+              }
+            } catch (logoutError) {
+              console.error('[API Response] Error during logout:', logoutError);
+              // Fallback: remove token from storage if store access fails
+              await storage.removeItem('auth_token');
+              await storage.removeItem('token_type');
+            }
+          }
         }
         return Promise.reject(error);
       }

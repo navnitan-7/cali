@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '../../../../stores/themeStore';
 import { useColors } from '../../../../utils/colors';
@@ -20,13 +21,47 @@ export default function TournamentDetailScreen() {
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
-  const { getTournament, deleteTournament } = useTournamentStore();
+  const { getTournament, deleteTournament, syncEventsOnly, syncParticipantsOnly } = useTournamentStore();
   const [activeTab, setActiveTab] = useState('Events');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [hasSyncedEvents, setHasSyncedEvents] = useState(false);
+  const [hasSyncedParticipants, setHasSyncedParticipants] = useState(false);
 
   const tournamentId = Array.isArray(id) ? id[0] : id;
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
+
+  // Sync events when Events tab is opened (only once per tab switch)
+  useEffect(() => {
+    if (activeTab === 'Events' && tournamentId && !hasSyncedEvents) {
+      const { isLoadingEvents } = useTournamentStore.getState();
+      // Only sync if not already loading (request deduplication)
+      if (!isLoadingEvents) {
+        console.log('[TournamentDetailScreen] Events tab opened - syncing events...');
+        syncEventsOnly(tournamentId).then(() => {
+          setHasSyncedEvents(true);
+        }).catch(error => {
+          console.error('[TournamentDetailScreen] Failed to sync events:', error);
+        });
+      }
+    }
+  }, [activeTab, tournamentId, hasSyncedEvents, syncEventsOnly]);
+
+  // Sync participants when Participants tab is opened (only once per tab switch)
+  useEffect(() => {
+    if (activeTab === 'Participants' && tournamentId && !hasSyncedParticipants) {
+      const { isLoadingParticipants } = useTournamentStore.getState();
+      // Only sync if not already loading (request deduplication)
+      if (!isLoadingParticipants) {
+        console.log('[TournamentDetailScreen] Participants tab opened - syncing participants...');
+        syncParticipantsOnly(tournamentId).then(() => {
+          setHasSyncedParticipants(true);
+        }).catch(error => {
+          console.error('[TournamentDetailScreen] Failed to sync participants:', error);
+        });
+      }
+    }
+  }, [activeTab, tournamentId, hasSyncedParticipants, syncParticipantsOnly]);
 
   // Get tournament accent color
   const accent = useMemo(() => {

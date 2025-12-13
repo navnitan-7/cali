@@ -16,7 +16,7 @@ export interface Event {
 
 export interface CreateEventData {
   name: string;
-  description: string;
+  description?: string;
   event_type: number;
 }
 

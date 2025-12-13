@@ -1,13 +1,15 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Animated, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/stores/themeStore';
 import { useColors } from '@/utils/colors';
 import { getFontFamily } from '@/utils/fonts';
 import { useTournamentStore, EventParticipantData } from '@/stores/tournamentStore';
+import { activityService } from '@/services/activityService';
 import Button from '@/components/ui/Button';
 import TabSwitch from '@/components/ui/TabSwitch';
 import TimePicker from '@/components/ui/TimePicker';
@@ -28,6 +30,7 @@ export default function EventParticipantDetailScreen() {
   const [tempTime, setTempTime] = useState('');
   const [tempReps, setTempReps] = useState('');
   const [tempWeight, setTempWeight] = useState('');
+  const [hasSyncedActivity, setHasSyncedActivity] = useState(false);
   
   // Stopwatch state
   const [stopwatchRunning, setStopwatchRunning] = useState(false);
@@ -54,6 +57,49 @@ export default function EventParticipantDetailScreen() {
   const eventData = tournamentId && eventId && participantId 
     ? getEventParticipantData(tournamentId, eventId, participantId)
     : undefined;
+
+  // Sync activity when Activity tab is opened
+  useEffect(() => {
+    if (activeTab === 'Activity' && eventId && participantId && tournamentId && !hasSyncedActivity) {
+      console.log('[EventParticipantDetailScreen] Activity tab opened - syncing activity...');
+      activityService.getMetrics(parseInt(eventId), parseInt(participantId))
+        .then(metrics => {
+          console.log('[EventParticipantDetailScreen] Received activity metrics:', metrics);
+          // Update event participant data with metrics from backend
+          if (metrics && metrics.length > 0) {
+            const latestMetric = metrics[metrics.length - 1];
+            updateEventParticipantData(tournamentId, eventId, participantId, {
+              time: latestMetric.time ? formatTimeFromSeconds(latestMetric.time) : undefined,
+              reps: latestMetric.reps,
+              weight: latestMetric.weight,
+            });
+          }
+          setHasSyncedActivity(true);
+        })
+        .catch(error => {
+          console.error('[EventParticipantDetailScreen] Failed to sync activity:', error);
+        });
+    }
+  }, [activeTab, eventId, participantId, tournamentId, hasSyncedActivity, updateEventParticipantData]);
+
+  // Reset sync flag when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      setHasSyncedActivity(false);
+    }, [])
+  );
+
+  // Helper to format time from seconds to MM:SS or HH:MM:SS
+  const formatTimeFromSeconds = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Get tournament accent color
   const accent = useMemo(() => {

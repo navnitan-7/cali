@@ -7,6 +7,7 @@ import { useTheme } from '../stores/themeStore';
 import { useColors } from '../utils/colors';
 import { getFontFamily } from '../utils/fonts';
 import { useAuthStore } from '../stores/authStore';
+import { useEventTypesStore } from '../stores/eventTypesStore';
 import Button from '../components/ui/Button';
 
 export default function LoginScreen() {
@@ -14,6 +15,7 @@ export default function LoginScreen() {
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
   const { login, isLoading: authLoading, error } = useAuthStore();
+  const { fetchEventTypes } = useEventTypesStore();
   
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +30,10 @@ export default function LoginScreen() {
     const success = await login(username.trim(), password);
     
     if (success) {
+      // Fetch and cache event types after successful login
+      fetchEventTypes().catch((error) => {
+        console.error('Error fetching event types after login:', error);
+      });
       router.replace('/(tabs)/tournaments');
     } else {
       Alert.alert('Login Failed', error || 'Invalid username or password');

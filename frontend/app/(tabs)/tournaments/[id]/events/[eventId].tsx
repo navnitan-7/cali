@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '../../../../../stores/themeStore';
 import { useColors } from '../../../../../utils/colors';
@@ -22,14 +23,33 @@ export default function EventDetailScreen() {
     getEvent, 
     deleteEvent,
     getEventParticipantData,
-    addEventParticipant,
+    syncEventDetails,
   } = useTournamentStore();
   const [activeTab, setActiveTab] = useState('Participants');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [hasSyncedEventDetails, setHasSyncedEventDetails] = useState(false);
 
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
   const event = tournamentId && eventId ? getEvent(tournamentId, eventId) : undefined;
+
+  // Sync event details when screen opens (only once)
+  useFocusEffect(
+    useCallback(() => {
+      if (tournamentId && eventId && !hasSyncedEventDetails) {
+        const { isLoadingEventDetails } = useTournamentStore.getState();
+        // Only sync if not already loading this event (request deduplication)
+        if (!isLoadingEventDetails[eventId]) {
+          console.log('[EventDetailScreen] Screen focused - syncing event details...');
+          syncEventDetails(tournamentId, eventId).then(() => {
+            setHasSyncedEventDetails(true);
+          }).catch(error => {
+            console.error('[EventDetailScreen] Failed to sync event details:', error);
+          });
+        }
+      }
+    }, [tournamentId, eventId, hasSyncedEventDetails, syncEventDetails])
+  );
 
   // Get tournament accent color
   const accent = useMemo(() => {
@@ -102,60 +122,9 @@ export default function EventDetailScreen() {
     );
   }
 
-  const [addParticipantModalVisible, setAddParticipantModalVisible] = useState(false);
-  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
-
-  // Get available participants (not already in event)
-  const availableParticipants = useMemo(() => {
-    if (!tournament) return [];
-    return tournament.participants.filter(p => !event.participantIds.includes(p.id));
-  }, [tournament, event]);
-
-  const handleAddParticipants = () => {
-    if (!tournamentId || !eventId) return;
-    selectedParticipantIds.forEach(participantId => {
-      addEventParticipant(tournamentId, eventId, participantId);
-    });
-    setSelectedParticipantIds([]);
-    setAddParticipantModalVisible(false);
-  };
 
   const renderParticipantsTab = () => (
     <View style={{ paddingBottom: insets.bottom + 100 }}>
-      {/* Add Participant Button */}
-      {availableParticipants.length > 0 && (
-        <TouchableOpacity
-          onPress={() => setAddParticipantModalVisible(true)}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 14,
-            paddingHorizontal: 16,
-            borderRadius: 12,
-            borderWidth: 1.5,
-            borderColor: accent ? accent.primary : colors['bg-primary'],
-            borderStyle: 'dashed',
-            backgroundColor: accent ? accent.primary + '08' : colors['bg-primary'] + '08',
-            marginBottom: 16,
-          }}
-        >
-          <Ionicons 
-            name="add-circle-outline" 
-            size={20} 
-            color={accent ? accent.primary : colors['bg-primary']} 
-          />
-          <Text style={{
-            fontSize: 15,
-            fontFamily: getFontFamily('semibold'),
-            color: accent ? accent.primary : colors['bg-primary'],
-            marginLeft: 8,
-          }}>
-            Add Participants
-          </Text>
-        </TouchableOpacity>
-      )}
-
       {eventParticipants.length === 0 ? (
         <View style={{
           alignItems: 'center',
@@ -169,7 +138,7 @@ export default function EventDetailScreen() {
             color: colors['text-secondary'],
             marginTop: 12,
           }}>
-            {availableParticipants.length > 0 ? 'No participants yet' : 'All participants added'}
+            No participants yet
           </Text>
         </View>
       ) : (
@@ -712,187 +681,6 @@ export default function EventDetailScreen() {
           }}
         />
 
-        {/* Add Participants Modal */}
-        <Modal
-          visible={addParticipantModalVisible}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setAddParticipantModalVisible(false)}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              justifyContent: 'flex-end',
-            }}
-            onPress={() => setAddParticipantModalVisible(false)}
-          >
-            <Pressable
-              style={{
-                backgroundColor: colors['bg-card'],
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                maxHeight: '80%',
-                paddingTop: 20,
-                paddingBottom: insets.bottom + 20,
-              }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingHorizontal: 20,
-                paddingBottom: 16,
-                borderBottomWidth: 1,
-                borderBottomColor: colors['border-default'],
-              }}>
-                <Text style={{
-                  fontSize: 18,
-                  fontFamily: getFontFamily('semibold'),
-                  color: colors['text-primary'],
-                }}>
-                  Add Participants
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setAddParticipantModalVisible(false);
-                    setSelectedParticipantIds([]);
-                  }}
-                >
-                  <Ionicons name="close" size={24} color={colors['text-primary']} />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView
-                style={{ maxHeight: 400 }}
-                contentContainerStyle={{ padding: 16 }}
-              >
-                {availableParticipants.length === 0 ? (
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <Ionicons name="checkmark-circle" size={48} color={colors['text-muted']} />
-                    <Text style={{
-                      fontSize: 15,
-                      fontFamily: getFontFamily('medium'),
-                      color: colors['text-secondary'],
-                      marginTop: 12,
-                    }}>
-                      All participants are already added
-                    </Text>
-                  </View>
-                ) : (
-                  availableParticipants.map((participant) => {
-                    const isSelected = selectedParticipantIds.includes(participant.id);
-                    return (
-                      <TouchableOpacity
-                        key={participant.id}
-                        onPress={() => {
-                          if (isSelected) {
-                            setSelectedParticipantIds(selectedParticipantIds.filter(id => id !== participant.id));
-                          } else {
-                            setSelectedParticipantIds([...selectedParticipantIds, participant.id]);
-                          }
-                        }}
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          padding: 14,
-                          borderRadius: 12,
-                          borderWidth: 1.5,
-                          borderColor: isSelected
-                            ? (accent ? accent.primary : colors['bg-primary'])
-                            : colors['border-default'],
-                          backgroundColor: isSelected
-                            ? (accent ? accent.primary + '10' : colors['bg-primary'] + '10')
-                            : colors['bg-card'],
-                          marginBottom: 10,
-                        }}
-                      >
-                        <View style={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 20,
-                          backgroundColor: isSelected
-                            ? (accent ? accent.primary : colors['bg-primary'])
-                            : colors['bg-secondary'],
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}>
-                          {isSelected ? (
-                            <Ionicons 
-                              name="checkmark" 
-                              size={20} 
-                              color={isDark ? '#000' : '#FFF'} 
-                            />
-                          ) : (
-                            <Text style={{
-                              fontSize: 16,
-                              fontFamily: getFontFamily('semibold'),
-                              color: colors['text-primary'],
-                            }}>
-                              {participant.name.charAt(0).toUpperCase()}
-                            </Text>
-                          )}
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{
-                            fontSize: 15,
-                            fontFamily: getFontFamily('medium'),
-                            color: colors['text-primary'],
-                          }}>
-                            {participant.name}
-                          </Text>
-                          {participant.weight && (
-                            <Text style={{
-                              fontSize: 12,
-                              fontFamily: getFontFamily('regular'),
-                              color: colors['text-secondary'],
-                              marginTop: 2,
-                            }}>
-                              {participant.weight} kg
-                            </Text>
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </ScrollView>
-
-              {selectedParticipantIds.length > 0 && (
-                <View style={{
-                  paddingHorizontal: 20,
-                  paddingTop: 16,
-                  borderTopWidth: 1,
-                  borderTopColor: colors['border-default'],
-                }}>
-                  <TouchableOpacity
-                    onPress={handleAddParticipants}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 14,
-                      borderRadius: 12,
-                      backgroundColor: colors['bg-primary'],
-                    }}
-                  >
-                    <Ionicons name="add" size={20} color={isDark ? '#000' : '#FFF'} />
-                    <Text style={{
-                      fontSize: 16,
-                      fontFamily: getFontFamily('semibold'),
-                      color: isDark ? '#000' : '#FFF',
-                      marginLeft: 8,
-                    }}>
-                      Add {selectedParticipantIds.length} Participant{selectedParticipantIds.length > 1 ? 's' : ''}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </Pressable>
-          </Pressable>
-        </Modal>
       </View>
     </SafeAreaView>
   );

@@ -45,11 +45,11 @@ export default function ParticipantDetailScreen() {
 
     try {
       await updateParticipant(tournamentId!, participantId!, {
-        name: name.trim(),
-        weight: weight ? parseFloat(weight) : undefined,
-        division: division || undefined,
-      });
-      router.back();
+      name: name.trim(),
+      weight: weight ? parseFloat(weight) : undefined,
+      division: division || undefined,
+    });
+    router.back();
     } catch (error) {
       console.error('Error updating participant:', error);
       Alert.alert('Error', 'Failed to update participant. Please try again.');

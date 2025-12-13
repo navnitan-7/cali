@@ -224,7 +224,6 @@ export const useEventStore = create<EventStore>()(
           // Call backend API to create event
           await eventService.createEvent({
             name: event.name,
-            description: event.name, // Use name as description if no description field
             event_type: eventTypeId,
           });
 
@@ -233,20 +232,20 @@ export const useEventStore = create<EventStore>()(
           const newBackendEvent = backendEvents[backendEvents.length - 1]; // Get the last one (newly created)
           
           const id = newBackendEvent.id.toString();
-          const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-          const newEvent: EventWithParticipants = {
-            ...event,
-            id,
-            participants: [],
-            participantCount: 0,
-            status: event.status || 'upcoming',
-            joinCode,
-          };
-          set((state) => ({
-            events: [...state.events, newEvent],
+        const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const newEvent: EventWithParticipants = {
+          ...event,
+          id,
+          participants: [],
+          participantCount: 0,
+          status: event.status || 'upcoming',
+          joinCode,
+        };
+        set((state) => ({
+          events: [...state.events, newEvent],
             isLoading: false,
-          }));
-          return id;
+        }));
+        return id;
         } catch (error: any) {
           console.error('[EventStore] Error creating event:', error);
           set({ error: error.message || 'Failed to create event', isLoading: false });

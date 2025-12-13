@@ -71,7 +71,19 @@ interface Tournament {
 
 interface TournamentStore {
   tournaments: Tournament[];
+  // Loading states for request deduplication
+  isLoadingEvents: boolean;
+  isLoadingParticipants: boolean;
+  isLoadingEventDetails: Record<string, boolean>; // eventId -> loading state
+  // In-flight promises for deduplication
+  syncEventsPromise: Promise<void> | null;
+  syncParticipantsPromise: Promise<void> | null;
+  syncEventDetailsPromises: Record<string, Promise<void>>; // eventId -> promise
+  
   syncEventsFromBackend: () => Promise<void>;
+  syncEventsOnly: (tournamentId: string) => Promise<void>;
+  syncParticipantsOnly: (tournamentId: string) => Promise<void>;
+  syncEventDetails: (tournamentId: string, eventId: string) => Promise<void>;
   addTournament: (tournament: Omit<Tournament, 'id' | 'participants' | 'events' | 'createdAt' | 'updatedAt'>) => string;
   updateTournament: (id: string, updates: Partial<Tournament>) => void;
   deleteTournament: (id: string) => void;
@@ -183,11 +195,31 @@ export const useTournamentStore = create<TournamentStore>()(
   persist(
     (set, get) => ({
       tournaments: getDefaultTournaments(),
+      isLoadingEvents: false,
+      isLoadingParticipants: false,
+      isLoadingEventDetails: {},
+      syncEventsPromise: null,
+      syncParticipantsPromise: null,
+      syncEventDetailsPromises: {},
       
       syncEventsFromBackend: async () => {
-        try {
-          console.log('[TournamentStore] Syncing events from backend...');
-          const backendEvents = await eventService.getEvents();
+        // If already syncing, return the existing promise
+        if (get().syncEventsPromise) {
+          console.log('[TournamentStore] Sync already in progress, returning existing promise');
+          return get().syncEventsPromise!;
+        }
+        
+        // If already loading, don't start another sync
+        if (get().isLoadingEvents) {
+          console.log('[TournamentStore] Events already loading, skipping duplicate call');
+          return Promise.resolve();
+        }
+        
+        const syncPromise = (async () => {
+          try {
+            set({ isLoadingEvents: true });
+            console.log('[TournamentStore] Syncing events from backend...');
+            const backendEvents = await eventService.getEvents();
           console.log('[TournamentStore] Received events from backend:', backendEvents);
           
           // Get all participants from backend
@@ -299,9 +331,224 @@ export const useTournamentStore = create<TournamentStore>()(
           });
           
           console.log('[TournamentStore] Events and participants synced successfully');
-        } catch (error) {
-          console.error('[TournamentStore] Error syncing from backend:', error);
+          } catch (error) {
+            console.error('[TournamentStore] Error syncing from backend:', error);
+          } finally {
+            set({ isLoadingEvents: false, syncEventsPromise: null });
+          }
+        })();
+        
+        set({ syncEventsPromise: syncPromise });
+        return syncPromise;
+      },
+      
+      syncEventsOnly: async (tournamentId: string) => {
+        // If already syncing, return the existing promise
+        if (get().syncEventsPromise) {
+          console.log('[TournamentStore] Events sync already in progress, returning existing promise');
+          return get().syncEventsPromise!;
         }
+        
+        // If already loading, don't start another sync
+        if (get().isLoadingEvents) {
+          console.log('[TournamentStore] Events already loading, skipping duplicate call');
+          return Promise.resolve();
+        }
+        
+        const syncPromise = (async () => {
+          try {
+            set({ isLoadingEvents: true });
+            console.log('[TournamentStore] Syncing events only for tournament:', tournamentId);
+            const backendEvents = await eventService.getEvents();
+          
+          // Transform backend events to tournament event format (without fetching participants)
+          const transformedEvents: Event[] = backendEvents.map((be: any) => {
+            return {
+              id: be.id.toString(),
+              name: be.name,
+              date: new Date().toISOString().split('T')[0],
+              category: be.event_type || 'Other',
+              divisions: ['Open'],
+              metrics: ['time', 'reps'],
+              participantIds: [], // Don't fetch participants here - will be fetched when needed
+              participantData: {},
+              status: 'upcoming',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+          });
+          
+          // Update tournament with events only
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) => {
+              if (tournament.id === tournamentId) {
+                const existingEventsMap = new Map(tournament.events.map(e => [e.id, e]));
+                const updatedEvents = transformedEvents.map(backendEvent => {
+                  const existingEvent = existingEventsMap.get(backendEvent.id);
+                  return {
+                    ...backendEvent,
+                    participantIds: existingEvent?.participantIds || backendEvent.participantIds,
+                    participantData: existingEvent?.participantData || backendEvent.participantData,
+                  };
+                });
+                const backendEventIds = new Set(transformedEvents.map(e => e.id));
+                const localOnlyEvents = tournament.events.filter(e => !backendEventIds.has(e.id));
+                
+                return {
+                  ...tournament,
+                  events: [...updatedEvents, ...localOnlyEvents],
+                  updatedAt: new Date().toISOString(),
+                };
+              }
+              return tournament;
+            }),
+          }));
+          
+          console.log('[TournamentStore] Events synced successfully');
+          } catch (error) {
+            console.error('[TournamentStore] Error syncing events:', error);
+          } finally {
+            set({ isLoadingEvents: false, syncEventsPromise: null });
+          }
+        })();
+        
+        set({ syncEventsPromise: syncPromise });
+        return syncPromise;
+      },
+      
+      syncParticipantsOnly: async (tournamentId: string) => {
+        // If already syncing, return the existing promise
+        if (get().syncParticipantsPromise) {
+          console.log('[TournamentStore] Participants sync already in progress, returning existing promise');
+          return get().syncParticipantsPromise!;
+        }
+        
+        // If already loading, don't start another sync
+        if (get().isLoadingParticipants) {
+          console.log('[TournamentStore] Participants already loading, skipping duplicate call');
+          return Promise.resolve();
+        }
+        
+        const syncPromise = (async () => {
+          try {
+            set({ isLoadingParticipants: true });
+            console.log('[TournamentStore] Syncing participants only for tournament:', tournamentId);
+            const backendParticipants = await participantService.getParticipants();
+          
+          // Transform backend participants to tournament participant format (deduplicate)
+          const participantMap = new Map<string, Participant>();
+          backendParticipants.forEach((bp: any) => {
+            const id = bp.id.toString();
+            if (!participantMap.has(id)) {
+              participantMap.set(id, {
+                id,
+                name: bp.name,
+                weight: bp.weight,
+                division: bp.gender || 'Open',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          });
+          const transformedParticipants = Array.from(participantMap.values());
+          
+          // Update tournament with participants only
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) => {
+              if (tournament.id === tournamentId) {
+                const existingParticipantIds = new Set(tournament.participants.map(p => p.id));
+                const newParticipants = transformedParticipants.filter(p => !existingParticipantIds.has(p.id));
+                
+                return {
+                  ...tournament,
+                  participants: [...tournament.participants.filter(p => 
+                    transformedParticipants.some(tp => tp.id === p.id)
+                  ), ...newParticipants],
+                  updatedAt: new Date().toISOString(),
+                };
+              }
+              return tournament;
+            }),
+          }));
+          
+          console.log('[TournamentStore] Participants synced successfully');
+          } catch (error) {
+            console.error('[TournamentStore] Error syncing participants:', error);
+          } finally {
+            set({ isLoadingParticipants: false, syncParticipantsPromise: null });
+          }
+        })();
+        
+        set({ syncParticipantsPromise: syncPromise });
+        return syncPromise;
+      },
+      
+      syncEventDetails: async (tournamentId: string, eventId: string) => {
+        // If already syncing this event, return the existing promise
+        const existingPromise = get().syncEventDetailsPromises[eventId];
+        if (existingPromise) {
+          console.log('[TournamentStore] Event details sync already in progress for event:', eventId);
+          return existingPromise;
+        }
+        
+        // If already loading this event, don't start another sync
+        if (get().isLoadingEventDetails[eventId]) {
+          console.log('[TournamentStore] Event details already loading for event:', eventId);
+          return Promise.resolve();
+        }
+        
+        const syncPromise = (async () => {
+          try {
+            set((state) => ({
+              isLoadingEventDetails: { ...state.isLoadingEventDetails, [eventId]: true },
+            }));
+            console.log('[TournamentStore] Syncing event details:', eventId);
+            const eventParticipants = await participantService.getParticipantsByEvent(parseInt(eventId));
+          
+          // Update the event's participantIds
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) => {
+              if (tournament.id === tournamentId) {
+                return {
+                  ...tournament,
+                  events: tournament.events.map((event) => {
+                    if (event.id === eventId) {
+                      return {
+                        ...event,
+                        participantIds: eventParticipants.map((p: any) => p.id?.toString() || p.participant_id?.toString()).filter(Boolean),
+                        updatedAt: new Date().toISOString(),
+                      };
+                    }
+                    return event;
+                  }),
+                  updatedAt: new Date().toISOString(),
+                };
+              }
+              return tournament;
+            }),
+          }));
+          
+          console.log('[TournamentStore] Event details synced successfully');
+          } catch (error) {
+            console.error('[TournamentStore] Error syncing event details:', error);
+          } finally {
+            set((state) => {
+              const newLoadingState = { ...state.isLoadingEventDetails };
+              delete newLoadingState[eventId];
+              const newPromises = { ...state.syncEventDetailsPromises };
+              delete newPromises[eventId];
+              return {
+                isLoadingEventDetails: newLoadingState,
+                syncEventDetailsPromises: newPromises,
+              };
+            });
+          }
+        })();
+        
+        set((state) => ({
+          syncEventDetailsPromises: { ...state.syncEventDetailsPromises, [eventId]: syncPromise },
+        }));
+        return syncPromise;
       },
       
       addTournament: (tournament) => {
@@ -366,31 +613,31 @@ export const useTournamentStore = create<TournamentStore>()(
           });
 
           const id = result.participant_id.toString();
-          const now = new Date().toISOString();
-          const newParticipant: Participant = {
-            ...participant,
-            id,
-            createdAt: now,
-            updatedAt: now,
-          };
-          set((state) => ({
-            tournaments: state.tournaments.map((tournament) =>
-              tournament.id === tournamentId
-                ? {
-                    ...tournament,
-                    participants: [...tournament.participants, newParticipant],
-                    updatedAt: new Date().toISOString(),
-                  }
-                : tournament
-            ),
-          }));
+        const now = new Date().toISOString();
+        const newParticipant: Participant = {
+          ...participant,
+          id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((state) => ({
+          tournaments: state.tournaments.map((tournament) =>
+            tournament.id === tournamentId
+              ? {
+                  ...tournament,
+                  participants: [...tournament.participants, newParticipant],
+                  updatedAt: new Date().toISOString(),
+                }
+              : tournament
+          ),
+        }));
           
           // Sync from backend to ensure UI is updated
           get().syncEventsFromBackend().catch(err => {
             console.error('[TournamentStore] Error syncing after participant creation:', err);
           });
           
-          return id;
+        return id;
         } catch (error) {
           console.error('[TournamentStore] Error creating participant:', error);
           throw error;
@@ -422,21 +669,21 @@ export const useTournamentStore = create<TournamentStore>()(
           });
 
           // Update local state
-          set((state) => ({
-            tournaments: state.tournaments.map((tournament) =>
-              tournament.id === tournamentId
-                ? {
-                    ...tournament,
-                    participants: tournament.participants.map((p) =>
-                      p.id === participantId
-                        ? { ...p, ...updates, updatedAt: new Date().toISOString() }
-                        : p
-                    ),
-                    updatedAt: new Date().toISOString(),
-                  }
-                : tournament
-            ),
-          }));
+        set((state) => ({
+          tournaments: state.tournaments.map((tournament) =>
+            tournament.id === tournamentId
+              ? {
+                  ...tournament,
+                  participants: tournament.participants.map((p) =>
+                    p.id === participantId
+                      ? { ...p, ...updates, updatedAt: new Date().toISOString() }
+                      : p
+                  ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : tournament
+          ),
+        }));
         } catch (error) {
           console.error('[TournamentStore] Error updating participant:', error);
           throw error;
@@ -499,33 +746,33 @@ export const useTournamentStore = create<TournamentStore>()(
           const newBackendEvent = backendEvents[backendEvents.length - 1]; // Get the last one (newly created)
           
           const id = newBackendEvent.id.toString();
-          const now = new Date().toISOString();
-          const newEvent: Event = {
-            ...event,
-            id,
-            participantIds: event.participantIds || [],
-            participantData: {},
-            createdAt: now,
-            updatedAt: now,
-          };
-          set((state) => ({
-            tournaments: state.tournaments.map((tournament) =>
-              tournament.id === tournamentId
-                ? {
-                    ...tournament,
-                    events: [...tournament.events, newEvent],
-                    updatedAt: new Date().toISOString(),
-                  }
-                : tournament
-            ),
-          }));
+        const now = new Date().toISOString();
+        const newEvent: Event = {
+          ...event,
+          id,
+          participantIds: event.participantIds || [],
+          participantData: {},
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((state) => ({
+          tournaments: state.tournaments.map((tournament) =>
+            tournament.id === tournamentId
+              ? {
+                  ...tournament,
+                  events: [...tournament.events, newEvent],
+                  updatedAt: new Date().toISOString(),
+                }
+              : tournament
+          ),
+        }));
           
           // Sync events from backend to ensure UI is updated
           get().syncEventsFromBackend().catch(err => {
             console.error('[TournamentStore] Error syncing after event creation:', err);
           });
           
-          return id;
+        return id;
         } catch (error) {
           console.error('[TournamentStore] Error creating event:', error);
           throw error;
@@ -747,6 +994,10 @@ export const useTournamentStore = create<TournamentStore>()(
     {
       name: 'tournament-storage',
       storage: createJSONStorage(() => asyncStorage),
+      partialize: (state) => ({
+        tournaments: state.tournaments,
+        // Don't persist loading states and promises
+      }),
     }
   )
 );
