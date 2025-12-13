@@ -17,10 +17,19 @@ def create_event(event: Event):
 def get_events():
     return db.read("SELECT * FROM cali_db.events")
 
-@router.get("/get/{id}")
-def get_event(id: int):
-    return db.read("SELECT * FROM cali_db.events WHERE id = :id", {"id": id})
-
 @router.get("/list_event_type")
 def get_event_types():
     return db.read("SELECT * FROM cali_db.event_type")
+
+@router.get("/by_participant/{id}")
+def get_events_by_participant(id: int):
+    return db.read("""
+        SELECT e.*, pe.event_id, pe.participant_id 
+        FROM cali_db.events e
+        INNER JOIN cali_db.participants_events pe ON e.id = pe.event_id
+        WHERE pe.participant_id = :id
+    """, {"id": id})
+
+@router.get("/get/{id}")
+def get_event(id: int):
+    return db.read("SELECT * FROM cali_db.events WHERE id = :id", {"id": id})

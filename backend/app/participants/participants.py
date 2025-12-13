@@ -31,8 +31,17 @@ def create_participant(participant: Participant):
 def get_participants():
     return db.read("SELECT * FROM cali_db.participants")
 
+@router.get("/by_event/{id}")
+def get_participants_by_event(id: int):
+    return db.read("""
+        SELECT p.*, pe.event_id, pe.participant_id 
+        FROM cali_db.participants p
+        INNER JOIN cali_db.participants_events pe ON p.id = pe.participant_id
+        WHERE pe.event_id = :id
+    """, {"id": id})
+
 @router.get("/get/{id}")
-def get_participant(id: int):
+def get_participant_details(id: int):
     return db.read("SELECT * FROM cali_db.participants WHERE id = :id", {"id": id})
 
 @router.put("/update/{id}")
