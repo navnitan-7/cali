@@ -7,7 +7,6 @@ import { useTheme } from '../../../../../stores/themeStore';
 import { useColors } from '../../../../../utils/colors';
 import { getFontFamily } from '../../../../../utils/fonts';
 import { useTournamentStore } from '../../../../../stores/tournamentStore';
-import { divisionOptions } from '../../../../../schemas/eventModal';
 import { useTournamentTheme } from '../../../../../hooks/useTournamentTheme';
 import Button from '../../../../../components/ui/Button';
 
@@ -24,7 +23,6 @@ export default function CreateParticipantScreen() {
 
   const [name, setName] = useState('');
   const [weight, setWeight] = useState('');
-  const [division, setDivision] = useState('');
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -55,7 +53,6 @@ export default function CreateParticipantScreen() {
       await addParticipant(tournamentId!, {
         name: name.trim(),
         weight: weight ? parseFloat(weight) : undefined,
-        division: division || undefined,
       }, selectedEvents);
       router.back();
     } catch (error) {
@@ -285,48 +282,6 @@ export default function CreateParticipantScreen() {
                   })}
                 </View>
               )}
-            </View>
-
-            {/* Division */}
-            <View style={{ marginBottom: 24 }}>
-              <Text style={{
-                fontSize: 14,
-                fontFamily: getFontFamily('medium'),
-                color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
-                marginBottom: 8,
-              }}>
-                Division
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {divisionOptions.map((div) => {
-                  const isSelected = division === div;
-                  const selectedColor = accent || colors['bg-primary'];
-                  return (
-                    <TouchableOpacity
-                      key={div}
-                      onPress={() => setDivision(isSelected ? '' : div)}
-                      style={{
-                        paddingHorizontal: 16,
-                        paddingVertical: 10,
-                        borderRadius: 20,
-                        borderWidth: 1.5,
-                        borderColor: isSelected ? selectedColor : colors['border-default'],
-                        backgroundColor: isSelected 
-                          ? (accent ? getAccentWithOpacity(0.15) : selectedColor + '20')
-                          : colors['bg-card'],
-                      }}
-                    >
-                      <Text style={{
-                        fontSize: 14,
-                        fontFamily: getFontFamily('medium'),
-                        color: isSelected ? selectedColor : colors['text-primary'],
-                      }}>
-                        {div}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
             </View>
           </ScrollView>
         </View>
