@@ -1,15 +1,17 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Animated, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Platform, ActivityIndicator, Switch, Modal, Pressable, FlatList, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTheme } from '@/stores/themeStore';
 import { useColors } from '@/utils/colors';
 import { getFontFamily } from '@/utils/fonts';
 import { useTournamentStore, EventParticipantData } from '@/stores/tournamentStore';
-import { activityService } from '@/services/activityService';
+import { activityService, AddActivityData } from '@/services/activityService';
+import { useActivityApi } from '@/hooks/useApiIntegration';
+import { useEventTypesStore } from '@/stores/eventTypesStore';
+import { ACTIVITY_FIELDS_BY_EVENT, MAX_ATTEMPTS_PER_EVENT, FIELD_LABELS, FIELD_ICONS } from '@/constants/activityFields';
 import Button from '@/components/ui/Button';
 import TabSwitch from '@/components/ui/TabSwitch';
 import TimePicker from '@/components/ui/TimePicker';
@@ -26,21 +28,16 @@ export default function EventParticipantDetailScreen() {
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('Metrics');
-  const [editingMetric, setEditingMetric] = useState<'time' | 'reps' | 'weight' | null>(null);
-  const [tempTime, setTempTime] = useState('');
-  const [tempReps, setTempReps] = useState('');
-  const [tempWeight, setTempWeight] = useState('');
-  const [hasSyncedActivity, setHasSyncedActivity] = useState(false);
+  const [formValues, setFormValues] = useState<Record<string, any>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+  const [showMetricsModal, setShowMetricsModal] = useState(false);
+  const [showAddActivityModal, setShowAddActivityModal] = useState(false);
+  const [hasSyncedActivity, setHasSyncedActivity] = useState(false);
+  const [editingAttemptId, setEditingAttemptId] = useState<string | null>(null);
   
-  // Stopwatch state
-  const [stopwatchRunning, setStopwatchRunning] = useState(false);
-  const [stopwatchPaused, setStopwatchPaused] = useState(false);
-  const [elapsedTime, setElapsedTime] = useState(0); // in milliseconds
-  const [savedTime, setSavedTime] = useState(0); // saved time when paused
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const { eventTypes } = useEventTypesStore();
+  const { addActivity } = useActivityApi();
 
   const {
     getTournament,
@@ -59,51 +56,102 @@ export default function EventParticipantDetailScreen() {
     ? getEventParticipantData(tournamentId, eventId, participantId)
     : undefined;
 
-  // Sync activity when Activity tab is opened
+  // Get event type ID from event category
+  const eventTypeId = useMemo(() => {
+    if (!event?.category || !eventTypes.length) return null;
+    const eventType = eventTypes.find(et => et.name === event.category);
+    return eventType?.id || null;
+  }, [event?.category, eventTypes]);
+
+  // Get required fields for this event type
+  const requiredFields = useMemo(() => {
+    if (!eventTypeId || !(eventTypeId in ACTIVITY_FIELDS_BY_EVENT)) return [];
+    return ACTIVITY_FIELDS_BY_EVENT[eventTypeId];
+  }, [eventTypeId]);
+
+  // Get activity type from event (auto-populated, not editable)
+  const activityType = useMemo(() => {
+    return event?.category || event?.name || '';
+  }, [event?.category, event?.name]);
+
+  // Sync activity when Activity tab is opened (for future API integration)
   useEffect(() => {
-    if (activeTab === 'Activity' && eventId && participantId && tournamentId && !hasSyncedActivity) {
-      console.log('[EventParticipantDetailScreen] Activity tab opened - syncing activity...');
-      setIsLoadingActivity(true);
-      activityService.getMetrics(parseInt(eventId), parseInt(participantId))
-        .then(metrics => {
-          console.log('[EventParticipantDetailScreen] Received activity metrics:', metrics);
-          // Update event participant data with metrics from backend
-          if (metrics && metrics.length > 0) {
-            const latestMetric = metrics[metrics.length - 1];
-            updateEventParticipantData(tournamentId, eventId, participantId, {
-              time: latestMetric.time ? formatTimeFromSeconds(latestMetric.time) : undefined,
-              reps: latestMetric.reps,
-              weight: latestMetric.weight,
-            });
-          }
-          setHasSyncedActivity(true);
-          setIsLoadingActivity(false);
-        })
-        .catch(error => {
-          console.error('[EventParticipantDetailScreen] Failed to sync activity:', error);
-          setIsLoadingActivity(false);
-        });
+    if (activeTab === 'Activity' && eventId && participantId && tournamentId) {
+      // Future: Load activity from API here
+      // setIsLoadingActivity(true);
+      // activityService.getActivity(parseInt(eventId), parseInt(participantId))
+      //   .then(activity => {
+      //     setIsLoadingActivity(false);
+      //   })
+      //   .catch(error => {
+      //     setIsLoadingActivity(false);
+      //   });
     }
-  }, [activeTab, eventId, participantId, tournamentId, hasSyncedActivity, updateEventParticipantData]);
+  }, [activeTab, eventId, participantId, tournamentId]);
 
-  // Reset sync flag when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      setHasSyncedActivity(false);
-    }, [])
-  );
-
-  // Helper to format time from seconds to MM:SS or HH:MM:SS
-  const formatTimeFromSeconds = (seconds: number): string => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
+  // Calculate next attempt_id based on existing attempts
+  const getNextAttemptId = useMemo(() => {
+    if (!eventTypeId) return 1;
     
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    const maxAttempts = MAX_ATTEMPTS_PER_EVENT[eventTypeId] || 1;
+    const existingAttemptIds = (eventData?.attempts || [])
+      .filter(attempt => attempt.type === 'metric' && attempt.data.attempt_id !== undefined)
+      .map(attempt => {
+        const attemptId = attempt.data.attempt_id;
+        return typeof attemptId === 'number' ? attemptId : parseInt(String(attemptId)) || 0;
+      })
+      .filter(id => id > 0);
+    
+    // Find the next available attempt_id starting from 1
+    for (let i = 1; i <= maxAttempts; i++) {
+      if (!existingAttemptIds.includes(i)) {
+        return i;
+      }
     }
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+    
+    // If all attempts are used, return the next number
+    const maxExistingId = existingAttemptIds.length > 0 ? Math.max(...existingAttemptIds) : 0;
+    return Math.min(maxExistingId + 1, maxAttempts);
+  }, [eventTypeId, eventData?.attempts]);
+
+  // Initialize form values when modals open
+  useEffect(() => {
+    if (showMetricsModal || showAddActivityModal) {
+      if (editingAttemptId) {
+        // Pre-fill form with existing attempt data when editing
+        const attemptToEdit = eventData?.attempts?.find(a => a.id === editingAttemptId);
+          if (attemptToEdit && attemptToEdit.data) {
+          const editData: Record<string, any> = {
+            is_success: attemptToEdit.data.is_success !== undefined ? attemptToEdit.data.is_success : true,
+          };
+          
+          if (attemptToEdit.data.attempt_id !== undefined) {
+            editData.attempt_id = attemptToEdit.data.attempt_id;
+          }
+          if (attemptToEdit.data.time !== undefined) {
+            // Convert time from seconds (number) to time string format if needed
+            if (typeof attemptToEdit.data.time === 'number') {
+              editData.time = secondsToTimeString(attemptToEdit.data.time);
+            } else if (typeof attemptToEdit.data.time === 'string') {
+              editData.time = attemptToEdit.data.time;
+            }
+          }
+          if (attemptToEdit.data.weight !== undefined) {
+            editData.weight = attemptToEdit.data.weight;
+          }
+          
+          setFormValues(editData);
+        }
+      } else {
+        // Initialize new form with default values
+        const initialValues: Record<string, any> = {
+          is_success: true,
+          attempt_id: getNextAttemptId,
+        };
+        setFormValues(initialValues);
+      }
+    }
+  }, [showMetricsModal, showAddActivityModal, editingAttemptId, eventData?.attempts, getNextAttemptId]);
 
   // Get tournament accent color
   const accent = useMemo(() => {
@@ -111,132 +159,6 @@ export default function EventParticipantDetailScreen() {
     const baseAccent = getTournamentAccent(tournament.name, tournament.description);
     return isDark ? getTournamentAccentDark(baseAccent) : baseAccent;
   }, [tournament, isDark]);
-
-  // Helper to get accent with opacity
-  const getAccentWithOpacity = (opacity: number) => {
-    if (!accent) return '';
-    const hexOpacity = Math.round(opacity * 255).toString(16).padStart(2, '0');
-    return accent.primary + hexOpacity;
-  };
-
-  // Format time from milliseconds to MM:SS or HH:MM:SS
-  const formatTime = (ms: number): string => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-
-    if (hours > 0) {
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  // Parse time string to milliseconds
-  const parseTimeToMs = (timeStr: string): number => {
-    const parts = timeStr.split(':').map(Number);
-    if (parts.length === 2) {
-      // MM:SS
-      return (parts[0] * 60 + parts[1]) * 1000;
-    } else if (parts.length === 3) {
-      // HH:MM:SS
-      return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
-    }
-    return 0;
-  };
-
-  // Stopwatch controls
-  useEffect(() => {
-    if (stopwatchRunning && !stopwatchPaused) {
-      startTimeRef.current = Date.now() - savedTime;
-      intervalRef.current = setInterval(() => {
-        setElapsedTime(Date.now() - startTimeRef.current);
-      }, 100);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [stopwatchRunning, stopwatchPaused, savedTime]);
-
-  // Pulse animation for running stopwatch
-  useEffect(() => {
-    if (stopwatchRunning && !stopwatchPaused) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [stopwatchRunning, stopwatchPaused]);
-
-  // Initialize saved time from eventData
-  useEffect(() => {
-    if (eventData?.time && !stopwatchRunning && elapsedTime === 0) {
-      const ms = parseTimeToMs(eventData.time);
-      setSavedTime(ms);
-      setElapsedTime(ms);
-    }
-  }, [eventData?.time]);
-
-  const handleStartStopwatch = () => {
-    if (stopwatchPaused) {
-      // Resume
-      setStopwatchPaused(false);
-      setStopwatchRunning(true);
-    } else {
-      // Start fresh or continue
-      setStopwatchRunning(true);
-      setStopwatchPaused(false);
-    }
-  };
-
-  const handlePauseStopwatch = () => {
-    setStopwatchPaused(true);
-    setSavedTime(elapsedTime);
-  };
-
-  const handleStopStopwatch = () => {
-    setStopwatchRunning(false);
-    setStopwatchPaused(false);
-    setSavedTime(elapsedTime);
-    // Auto-save the time
-    if (tournamentId && eventId && participantId && elapsedTime > 0) {
-      const timeStr = formatTime(elapsedTime);
-      updateEventParticipantData(tournamentId, eventId, participantId, {
-        time: timeStr,
-      });
-      addEventParticipantAttempt(tournamentId, eventId, participantId, {
-        type: 'metric',
-        data: { time: timeStr },
-      });
-    }
-  };
-
-  const handleResetStopwatch = () => {
-    setStopwatchRunning(false);
-    setStopwatchPaused(false);
-    setElapsedTime(0);
-    setSavedTime(0);
-  };
 
   if (!tournament || !event || !participant) {
     return (
@@ -248,543 +170,357 @@ export default function EventParticipantDetailScreen() {
     );
   }
 
-  const handleSaveMetric = (type: 'time' | 'reps' | 'weight') => {
-    if (!tournamentId || !eventId || !participantId) return;
+  const handleSubmitForm = async () => {
+    if (!tournamentId || !eventId || !participantId || !eventTypeId) return;
 
-    let value: string | number | undefined;
-    if (type === 'time') {
-      if (!tempTime.trim()) {
-        Alert.alert('Error', 'Please enter a valid time');
+    // Validate required fields - check for empty strings and whitespace
+    // Skip type_of_activity as it's auto-populated from event
+    const validatedValues: Record<string, any> = {};
+    for (const field of requiredFields) {
+      if (field === 'type_of_activity') continue; // Skip type_of_activity as it's auto-populated from event
+      
+      const value = formValues[field];
+      
+      // Special handling for attempt_id - must be a valid number
+      if (field === 'attempt_id') {
+        if (value === undefined || value === null || value === '') {
+          Alert.alert('Error', `${FIELD_LABELS[field]} is required`);
+          return;
+        }
+        const attemptIdNum = typeof value === 'number' ? value : parseInt(value);
+        if (isNaN(attemptIdNum)) {
+          Alert.alert('Error', `${FIELD_LABELS[field]} must be a valid number`);
+          return;
+        }
+        validatedValues[field] = attemptIdNum;
+        continue;
+      }
+      
+      const isEmpty = value === undefined || value === null || value === '' || 
+                     (typeof value === 'string' && value.trim() === '');
+      
+      if (isEmpty) {
+        Alert.alert('Error', `${FIELD_LABELS[field]} is required`);
         return;
       }
-      value = tempTime;
-    } else if (type === 'reps') {
-      const repsNum = parseInt(tempReps);
-      if (isNaN(repsNum) || repsNum < 0) {
-        Alert.alert('Error', 'Please enter a valid number of reps');
-        return;
-      }
-      value = repsNum;
-    } else if (type === 'weight') {
-      const weightNum = parseFloat(tempWeight);
-      if (isNaN(weightNum) || weightNum < 0) {
-        Alert.alert('Error', 'Please enter a valid weight');
-        return;
-      }
-      value = weightNum;
+      
+      // Store validated value (trimmed if string)
+      validatedValues[field] = typeof value === 'string' ? value.trim() : value;
+    }
+    
+    // Always include is_success with default true if not in requiredFields or not set
+    if (!validatedValues.hasOwnProperty('is_success')) {
+      validatedValues['is_success'] = formValues['is_success'] !== undefined 
+        ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
+        : true; // Default to true
     }
 
-    updateEventParticipantData(tournamentId, eventId, participantId, {
-      [type]: value,
-    });
+    try {
+      setIsSubmitting(true);
 
-    addEventParticipantAttempt(tournamentId, eventId, participantId, {
-      type: 'metric',
-      data: { [type]: value },
-    });
+      // Prepare activity data for backend with all required fields
+      // Use validated values for required fields, and formValues for optional fields
+      // type_of_activity is automatically taken from event category/name
+      const activityData: AddActivityData = {
+        event_id: parseInt(eventId),
+        participant_id: parseInt(participantId),
+        attempt_id: requiredFields.includes('attempt_id')
+          ? (typeof validatedValues['attempt_id'] === 'number' 
+              ? validatedValues['attempt_id'] 
+              : parseInt(validatedValues['attempt_id']))
+          : Date.now(), // Fallback to auto-generate if not required
+        // type_of_activity is automatically populated from event category/name
+        type_of_activity: activityType || event?.name || '',
+        weight: requiredFields.includes('weight')
+          ? (typeof validatedValues['weight'] === 'number' 
+              ? validatedValues['weight'] 
+              : parseFloat(validatedValues['weight']))
+          : (formValues['weight'] !== undefined && formValues['weight'] !== '' 
+              ? (typeof formValues['weight'] === 'number' ? formValues['weight'] : parseFloat(formValues['weight']))
+              : null),
+        time: requiredFields.includes('time')
+          ? (typeof validatedValues['time'] === 'string' 
+              ? parseTimeToSeconds(validatedValues['time']) 
+              : validatedValues['time'])
+          : (formValues['time'] && formValues['time'] !== '00:00:000' && formValues['time'] !== '00:00:000:000'
+              ? (typeof formValues['time'] === 'string' ? parseTimeToSeconds(formValues['time']) : formValues['time'])
+              : null),
+        is_success: requiredFields.includes('is_success')
+          ? (validatedValues['is_success'] === true || validatedValues['is_success'] === 'true')
+          : (formValues['is_success'] !== undefined 
+              ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
+              : null),
+        reps: null,
+        is_deleted: false,
+      };
 
-    setEditingMetric(null);
-    setTempTime('');
-    setTempReps('');
-    setTempWeight('');
+      // Add activity to backend
+      await addActivity(activityData);
+
+      // Update local state
+      const updateData: Record<string, any> = {};
+      requiredFields.forEach(reqField => {
+        if (reqField !== 'attempt_id' && reqField !== 'type_of_activity' && formValues[reqField] !== undefined) {
+          updateData[reqField] = formValues[reqField];
+        }
+      });
+
+      // Add type_of_activity to updateData if it's required (it's auto-populated)
+      if (requiredFields.includes('type_of_activity')) {
+        updateData.type_of_activity = activityType || event?.name || '';
+      }
+
+      updateEventParticipantData(tournamentId, eventId, participantId, updateData);
+
+      // Prepare attempt data with all fields including type_of_activity and is_success
+      const attemptData: Record<string, any> = { ...updateData };
+      // Always include is_success (default to true if not set)
+      attemptData.is_success = validatedValues['is_success'] !== undefined 
+        ? (validatedValues['is_success'] === true || validatedValues['is_success'] === 'true')
+        : (formValues['is_success'] !== undefined 
+            ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
+            : true); // Default to true
+      if (requiredFields.includes('type_of_activity')) {
+        attemptData.type_of_activity = activityType || event?.name || '';
+      }
+
+      addEventParticipantAttempt(tournamentId, eventId, participantId, {
+        type: 'metric',
+        data: attemptData,
+      });
+
+      // Reset form and close modal
+      setEditingAttemptId(null);
+      setFormValues({});
+      setIsSubmitting(false);
+      setShowAddActivityModal(false);
+      
+      // Refresh activity list
+      setHasSyncedActivity(false);
+      
+      Alert.alert('Success', 'Activity added successfully');
+    } catch (error: any) {
+      console.error('Error saving activity:', error);
+      setIsSubmitting(false);
+      Alert.alert('Error', error.message || 'Failed to add activity');
+    }
+  };
+
+  // Helper to parse time string to seconds (with milliseconds/microseconds as decimal)
+  const parseTimeToSeconds = (timeStr: string): number => {
+    const parts = timeStr.split(':').map(Number);
+    if (parts.length === 2) {
+      // MM:SS format
+      return parts[0] * 60 + parts[1];
+    } else if (parts.length === 3) {
+      // Check if third part is hours (0-23) or milliseconds (0-999)
+      if (parts[0] < 24 && parts[1] < 60 && parts[2] < 60) {
+        // HH:MM:SS format
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      } else {
+        // MM:SS:MS format - convert to seconds with milliseconds as decimal
+        return parts[0] * 60 + parts[1] + parts[2] / 1000;
+      }
+    } else if (parts.length === 4) {
+      // MM:SS:MS:US format - convert to seconds with microseconds as decimal
+      return parts[0] * 60 + parts[1] + parts[2] / 1000 + parts[3] / 1000000;
+    }
+    return 0;
+  };
+
+  // Helper to convert seconds to time string format (MM:SS:MS:US)
+  const secondsToTimeString = (seconds: number): string => {
+    const totalSeconds = Math.floor(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    
+    // Extract milliseconds and microseconds from decimal part
+    const decimalPart = seconds - totalSeconds;
+    const milliseconds = Math.floor(decimalPart * 1000);
+    const microseconds = Math.floor((decimalPart * 1000 - milliseconds) * 1000);
+    
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${milliseconds.toString().padStart(3, '0')}:${microseconds.toString().padStart(3, '0')}`;
   };
 
   const handleAddVideo = () => {
     Alert.alert('Coming Soon', 'Video upload functionality will be available soon');
   };
 
-  const renderMetricsTab = () => (
-    <View style={{ paddingBottom: insets.bottom + 100 }}>
-      {/* Time Metric with Stopwatch */}
-      <View style={{
-        borderRadius: 14,
-        padding: 20,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: accent ? getAccentWithOpacity(0.2) : colors['border-default'],
-        backgroundColor: colors['bg-card'],
-        overflow: 'hidden',
-      }}>
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="time-outline" size={20} color={accent ? accent.primary : colors['bg-primary']} />
-            <Text style={{
-              fontSize: 16,
-              fontFamily: getFontFamily('semibold'),
-              color: colors['text-primary'],
-              marginLeft: 8,
-            }}>
-              Time
-            </Text>
-          </View>
-          {!editingMetric && !stopwatchRunning && (
-            <TouchableOpacity 
-              onPress={() => {
-                setEditingMetric('time');
-                setTempTime(eventData?.time || formatTime(elapsedTime || savedTime));
-              }}
-              style={{ padding: 4 }}
-            >
-              <Ionicons name="create-outline" size={18} color={colors['text-secondary']} />
-            </TouchableOpacity>
-          )}
-        </View>
+  // Get metrics fields (time, weight, etc.) - exclude type_of_activity, but always include is_success
+  const metricsFields = useMemo(() => {
+    const fields = requiredFields.filter(f => f !== 'attempt_id' && f !== 'type_of_activity' && f !== 'is_success');
+    // Always add is_success to metrics fields
+    if (!fields.includes('is_success')) {
+      fields.push('is_success');
+    }
+    return fields;
+  }, [requiredFields]);
 
-        {/* Stopwatch Display */}
-        {!editingMetric ? (
-          <View>
-            <Animated.View
-              style={{
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingVertical: 24,
-                paddingHorizontal: 16,
-                marginBottom: 20,
-                borderRadius: 12,
-                backgroundColor: stopwatchRunning && !stopwatchPaused
-                  ? (accent ? getAccentWithOpacity(0.08) : colors['bg-primary'] + '10')
-                  : colors['bg-secondary'],
-                transform: [{ scale: stopwatchRunning && !stopwatchPaused ? pulseAnim : 1 }],
-              }}
-            >
-              <Text style={{
-                fontSize: 48,
-                fontFamily: getFontFamily('bold'),
-                color: stopwatchRunning && !stopwatchPaused
-                  ? (accent ? accent.primary : colors['bg-primary'])
-                  : colors['text-primary'],
-                letterSpacing: 2,
-              }}>
-                {formatTime(stopwatchRunning ? elapsedTime : (savedTime || parseTimeToMs(eventData?.time || '00:00')))}
-              </Text>
-              {stopwatchRunning && !stopwatchPaused && (
-                <View style={{ 
-                  flexDirection: 'row', 
-                  alignItems: 'center', 
-                  marginTop: 8,
-                  paddingHorizontal: 12,
-                  paddingVertical: 4,
-                  borderRadius: 12,
-                  backgroundColor: accent ? getAccentWithOpacity(0.15) : colors['bg-primary'] + '20',
-                }}>
-                  <View style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: accent ? accent.primary : colors['bg-primary'],
-                    marginRight: 6,
-                  }} />
-                  <Text style={{
-                    fontSize: 12,
-                    fontFamily: getFontFamily('medium'),
-                    color: accent ? accent.primary : colors['bg-primary'],
-                  }}>
-                    Running
-                  </Text>
-                </View>
-              )}
-            </Animated.View>
+  // Get all activity fields (including attempt_id, is_success) - always include is_success
+  const activityFields = useMemo(() => {
+    const fields = requiredFields.filter(f => f !== 'type_of_activity'); // type_of_activity is auto-populated
+    // Always add is_success to activity fields if not already present
+    if (!fields.includes('is_success')) {
+      fields.push('is_success');
+    }
+    return fields;
+  }, [requiredFields]);
 
-            {/* Stopwatch Controls - Elegant Buttons */}
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-              {!stopwatchRunning ? (
-                <TouchableOpacity
-                  onPress={handleStartStopwatch}
-                  activeOpacity={0.8}
-                  style={{
-                    flex: 1,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    paddingVertical: 16,
-                    borderRadius: 14,
-                    backgroundColor: colors['bg-primary'],
-                    overflow: 'hidden',
-                    shadowColor: colors['bg-primary'],
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: 3,
-                  }}
-                >
-                  <View style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 10,
-                  }}>
-                    <Ionicons name="play" size={16} color={isDark ? '#000' : '#FFF'} />
-                  </View>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('semibold'),
-                    color: isDark ? '#000' : '#FFF',
-                  }}>
-                    Start
-                  </Text>
-                </TouchableOpacity>
-              ) : stopwatchPaused ? (
-                <>
-                  <TouchableOpacity
-                    onPress={handleStartStopwatch}
-                    activeOpacity={0.8}
-                    style={{
-                      flex: 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 16,
-                      borderRadius: 14,
-                      backgroundColor: colors['bg-primary'],
-                      overflow: 'hidden',
-                      shadowColor: colors['bg-primary'],
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.2,
-                      shadowRadius: 4,
-                      elevation: 3,
-                    }}
-                  >
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 10,
-                    }}>
-                      <Ionicons name="play" size={16} color={isDark ? '#000' : '#FFF'} />
-                    </View>
-                    <Text style={{
-                      fontSize: 16,
-                      fontFamily: getFontFamily('semibold'),
-                      color: isDark ? '#000' : '#FFF',
-                    }}>
-                      Resume
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleResetStopwatch}
-                    activeOpacity={0.7}
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 14,
-                      borderWidth: 1.5,
-                      borderColor: colors['border-default'],
-                      backgroundColor: colors['bg-card'],
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Ionicons name="refresh" size={22} color={colors['text-primary']} />
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    onPress={handlePauseStopwatch}
-                    activeOpacity={0.7}
-                    style={{
-                      flex: 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 16,
-                      borderRadius: 14,
-                      borderWidth: 1.5,
-                      borderColor: accent ? getAccentWithOpacity(0.3) : colors['border-default'],
-                      backgroundColor: colors['bg-card'],
-                    }}
-                  >
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: accent ? getAccentWithOpacity(0.1) : colors['bg-secondary'],
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 10,
-                    }}>
-                      <Ionicons 
-                        name="pause" 
-                        size={16} 
-                        color={accent ? accent.primary : colors['text-primary']} 
-                      />
-                    </View>
-                    <Text style={{
-                      fontSize: 16,
-                      fontFamily: getFontFamily('semibold'),
-                      color: colors['text-primary'],
-                    }}>
-                      Pause
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleStopStopwatch}
-                    activeOpacity={0.8}
-                    style={{
-                      flex: 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 16,
-                      borderRadius: 14,
-                      backgroundColor: colors['bg-primary'],
-                      overflow: 'hidden',
-                      shadowColor: colors['bg-primary'],
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.2,
-                      shadowRadius: 4,
-                      elevation: 3,
-                    }}
-                  >
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 10,
-                    }}>
-                      <Ionicons name="stop" size={16} color={isDark ? '#000' : '#FFF'} />
-                    </View>
-                    <Text style={{
-                      fontSize: 16,
-                      fontFamily: getFontFamily('semibold'),
-                      color: isDark ? '#000' : '#FFF',
-                    }}>
-                      Stop & Save
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
 
-            {/* Saved Time Display */}
-            {eventData?.time && !stopwatchRunning && (
-              <View style={{
-                paddingTop: 16,
-                borderTopWidth: 1,
-                borderTopColor: colors['border-default'],
-              }}>
-                <Text style={{
-                  fontSize: 12,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                  marginBottom: 4,
-                }}>
-                  Saved Time
-                </Text>
-                <Text style={{
-                  fontSize: 18,
-                  fontFamily: getFontFamily('semibold'),
-                  color: colors['text-primary'],
-                }}>
-                  {eventData.time}
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          <View>
-            <TimePicker
-              value={tempTime || '00:00'}
-              onChange={setTempTime}
-              isDark={isDark}
-              accentColor={accent?.primary}
-            />
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-              <Button
-                title="Save"
-                onPress={() => handleSaveMetric('time')}
-                variant="primary"
-                size="medium"
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Cancel"
-                onPress={() => {
-                  setEditingMetric(null);
-                  setTempTime('');
-                }}
-                variant="outline"
-                size="medium"
-                style={{ flex: 1 }}
-              />
-            </View>
-          </View>
-        )}
-      </View>
 
-      {/* Reps Metric */}
-      <View style={{
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 10,
-        borderWidth: 1,
-        borderColor: colors['border-default'],
-        backgroundColor: colors['bg-card'],
-      }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="repeat-outline" size={18} color={accent ? accent.primary : colors['bg-primary']} />
-            <Text style={{
-              fontSize: 15,
-              fontFamily: getFontFamily('medium'),
-              color: colors['text-primary'],
-              marginLeft: 8,
-            }}>
-              Reps
-            </Text>
-          </View>
-          {!editingMetric && (
-            <TouchableOpacity onPress={() => {
-              setEditingMetric('reps');
-              setTempReps(eventData?.reps?.toString() || '');
-            }}>
-              <Ionicons name="create-outline" size={18} color={colors['text-secondary']} />
-            </TouchableOpacity>
-          )}
-        </View>
-        {editingMetric === 'reps' ? (
-          <View>
-            <TextInput
-              placeholder="Number of reps"
-              placeholderTextColor={colors['text-secondary']}
-              value={tempReps}
-              onChangeText={setTempReps}
-              keyboardType="numeric"
-              style={{
-                borderWidth: 1,
-                borderColor: colors['border-default'],
-                borderRadius: 8,
-                padding: 10,
-                color: colors['text-primary'],
-                fontFamily: getFontFamily('regular'),
-                backgroundColor: colors['bg-secondary'],
-                marginBottom: 10,
-                fontSize: 14,
-              }}
-            />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Button
-                title="Save"
-                onPress={() => handleSaveMetric('reps')}
-                variant="primary"
-                size="small"
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Cancel"
-                onPress={() => {
-                  setEditingMetric(null);
-                  setTempReps('');
-                }}
-                variant="outline"
-                size="small"
-                style={{ flex: 1 }}
-              />
-            </View>
-          </View>
-        ) : (
+  // Render a single form field for metrics (time, weight, is_success)
+  const renderMetricsField = (field: string) => {
+    const iconName = FIELD_ICONS[field] || 'ellipse-outline';
+    const label = FIELD_LABELS[field] || field;
+    const isRequired = requiredFields.includes(field);
+
+    return (
+      <View key={field} style={{ marginBottom: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <Ionicons name={iconName as any} size={18} color={accent ? accent.primary : colors['bg-primary']} />
           <Text style={{
-            fontSize: 16,
-            fontFamily: getFontFamily('semibold'),
+            fontSize: 14,
+            fontFamily: getFontFamily('medium'),
             color: colors['text-primary'],
+            marginLeft: 8,
           }}>
-            {eventData?.reps !== undefined ? `${eventData.reps} reps` : 'Not set'}
+            {label} {isRequired && <Text style={{ color: colors['text-danger'] }}>*</Text>}
           </Text>
-        )}
-      </View>
+        </View>
 
-      {/* Weight Metric */}
-      <View style={{
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 10,
-        borderWidth: 1,
-        borderColor: colors['border-default'],
-        backgroundColor: colors['bg-card'],
-      }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="barbell-outline" size={18} color={accent ? accent.primary : colors['bg-primary']} />
-            <Text style={{
-              fontSize: 15,
-              fontFamily: getFontFamily('medium'),
+        {field === 'time' ? (
+          <TimePicker
+            value={formValues[field] || '00:00:000:000'}
+            onChange={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+            isDark={isDark}
+            accentColor={accent?.primary}
+            precision="microseconds"
+          />
+        ) : field === 'weight' ? (
+          <TextInput
+            placeholder="Weight in kg"
+            placeholderTextColor={colors['text-secondary']}
+            value={formValues[field]?.toString() || ''}
+            onChangeText={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+            keyboardType="decimal-pad"
+            style={{
+              borderWidth: 1,
+              borderColor: colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
               color: colors['text-primary'],
-              marginLeft: 8,
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 14,
+            }}
+          />
+        ) : field === 'is_success' ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Switch
+              value={formValues[field] !== undefined ? (formValues[field] === true || formValues[field] === 'true') : true}
+              onValueChange={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+              trackColor={{ false: colors['bg-secondary'], true: accent?.primary || colors['bg-primary'] }}
+              thumbColor={(formValues[field] !== undefined ? (formValues[field] === true || formValues[field] === 'true') : true) ? '#fff' : colors['text-secondary']}
+            />
+            <Text style={{
+              fontSize: 14,
+              fontFamily: getFontFamily('regular'),
+              color: colors['text-secondary'],
+              marginLeft: 12,
             }}>
-              Weight
+              {(formValues[field] !== undefined ? (formValues[field] === true || formValues[field] === 'true') : true) ? 'Success' : 'Failed'}
             </Text>
           </View>
-          {!editingMetric && (
-            <TouchableOpacity onPress={() => {
-              setEditingMetric('weight');
-              setTempWeight(eventData?.weight?.toString() || '');
-            }}>
-              <Ionicons name="create-outline" size={18} color={colors['text-secondary']} />
-            </TouchableOpacity>
-          )}
-        </View>
-        {editingMetric === 'weight' ? (
-          <View>
-            <TextInput
-              placeholder="Weight in kg"
-              placeholderTextColor={colors['text-secondary']}
-              value={tempWeight}
-              onChangeText={setTempWeight}
-              keyboardType="decimal-pad"
-              style={{
-                borderWidth: 1,
-                borderColor: colors['border-default'],
-                borderRadius: 8,
-                padding: 10,
-                color: colors['text-primary'],
-                fontFamily: getFontFamily('regular'),
-                backgroundColor: colors['bg-secondary'],
-                marginBottom: 10,
-                fontSize: 14,
-              }}
-            />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Button
-                title="Save"
-                onPress={() => handleSaveMetric('weight')}
-                variant="primary"
-                size="small"
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Cancel"
-                onPress={() => {
-                  setEditingMetric(null);
-                  setTempWeight('');
-                }}
-                variant="outline"
-                size="small"
-                style={{ flex: 1 }}
-              />
-            </View>
-          </View>
-        ) : (
-          <Text style={{
-            fontSize: 16,
-            fontFamily: getFontFamily('semibold'),
-            color: colors['text-primary'],
-          }}>
-            {eventData?.weight !== undefined ? `${eventData.weight} kg` : 'Not set'}
-          </Text>
-        )}
+        ) : null}
       </View>
-    </View>
-  );
+    );
+  };
+
+  // Render a single form field for activity (all fields including attempt_id, is_success)
+  const renderActivityField = (field: string) => {
+    const iconName = FIELD_ICONS[field] || 'ellipse-outline';
+    const label = FIELD_LABELS[field] || field;
+    const isRequired = requiredFields.includes(field);
+
+    return (
+      <View key={field} style={{ marginBottom: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <Ionicons name={iconName as any} size={18} color={accent ? accent.primary : colors['bg-primary']} />
+          <Text style={{
+            fontSize: 14,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-primary'],
+            marginLeft: 8,
+          }}>
+            {label} {isRequired && <Text style={{ color: colors['text-danger'] }}>*</Text>}
+          </Text>
+        </View>
+
+        {field === 'attempt_id' ? (
+          <TextInput
+            placeholder="Attempt ID"
+            placeholderTextColor={colors['text-secondary']}
+            value={formValues[field]?.toString() || ''}
+            onChangeText={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+            keyboardType="numeric"
+            style={{
+              borderWidth: 1,
+              borderColor: colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-primary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 14,
+            }}
+          />
+        ) : field === 'time' ? (
+          <TimePicker
+            value={formValues[field] || '00:00:000:000'}
+            onChange={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+            isDark={isDark}
+            accentColor={accent?.primary}
+            precision="microseconds"
+          />
+        ) : field === 'weight' ? (
+          <TextInput
+            placeholder="Weight in kg"
+            placeholderTextColor={colors['text-secondary']}
+            value={formValues[field]?.toString() || ''}
+            onChangeText={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+            keyboardType="decimal-pad"
+            style={{
+              borderWidth: 1,
+              borderColor: colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-primary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 14,
+            }}
+          />
+        ) : field === 'is_success' ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Switch
+              value={formValues[field] === true || formValues[field] === 'true'}
+              onValueChange={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+              trackColor={{ false: colors['bg-secondary'], true: accent?.primary || colors['bg-primary'] }}
+              thumbColor={formValues[field] === true || formValues[field] === 'true' ? '#fff' : colors['text-secondary']}
+            />
+            <Text style={{
+              fontSize: 14,
+              fontFamily: getFontFamily('regular'),
+              color: colors['text-secondary'],
+              marginLeft: 12,
+            }}>
+              {formValues[field] === true || formValues[field] === 'true' ? 'Success' : 'Failed'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
 
   const renderVideosTab = () => (
     <View style={{ paddingBottom: insets.bottom + 100 }}>
@@ -875,120 +611,831 @@ export default function EventParticipantDetailScreen() {
     </View>
   );
 
-  const renderActivityTab = () => (
-    <View style={{ paddingBottom: insets.bottom + 100 }}>
-      {isLoadingActivity ? (
+  // Memoized sorted attempts for performance
+  const sortedAttempts = useMemo(() => {
+    if (!eventData?.attempts || eventData.attempts.length === 0) return [];
+    return [...eventData.attempts].sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }, [eventData?.attempts]);
+
+  // Memoized Activity Item Component for better performance
+  const ActivityItem = React.memo(({ 
+    item, 
+    colors: itemColors, 
+    accent: itemAccent, 
+    isDark: itemIsDark,
+    onEdit
+  }: { 
+    item: NonNullable<EventParticipantData['attempts']>[0];
+    colors: ReturnType<typeof useColors>;
+    accent: ReturnType<typeof getTournamentAccent> | null;
+    isDark: boolean;
+    onEdit: (attemptId: string) => void;
+  }) => {
+    const getTypeIcon = (type: string) => {
+      switch (type) {
+        case 'metric': return 'stats-chart';
+        case 'video': return 'videocam';
+        default: return 'document-text';
+      }
+    };
+
+    return (
+      <View
+        style={{
+          borderRadius: 16,
+          padding: 16,
+          marginBottom: 12,
+          borderWidth: 1,
+          borderColor: itemColors['border-default'],
+          backgroundColor: itemColors['bg-card'],
+          shadowColor: itemIsDark ? '#000' : '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 4,
+          elevation: 2,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <View style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: itemAccent ? itemAccent.primary + '20' : itemColors['bg-primary'] + '20',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 12,
+          }}>
+            <Ionicons 
+              name={getTypeIcon(item.type) as any} 
+              size={18} 
+              color={itemAccent ? itemAccent.primary : itemColors['bg-primary']} 
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{
+              fontSize: 14,
+              fontFamily: getFontFamily('semibold'),
+              color: itemColors['text-primary'],
+              textTransform: 'capitalize',
+            }}>
+              {item.type}
+              {item.data.attempt_id && (
+                <Text style={{ fontFamily: getFontFamily('regular'), color: itemColors['text-secondary'] }}>
+                  {' '}(Attempt {item.data.attempt_id})
+                </Text>
+              )}
+            </Text>
+            <Text style={{
+              fontSize: 11,
+              fontFamily: getFontFamily('regular'),
+              color: itemColors['text-secondary'],
+              marginTop: 2,
+            }}>
+              {new Date(item.timestamp).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </Text>
+          </View>
+          {item.type === 'metric' && (
+            <TouchableOpacity
+              onPress={() => onEdit(item.id)}
+              style={{
+                padding: 8,
+                borderRadius: 8,
+                backgroundColor: itemAccent ? itemAccent.primary + '20' : itemColors['bg-secondary'],
+              }}
+            >
+              <Ionicons 
+                name="create-outline" 
+                size={20} 
+                color={itemAccent ? itemAccent.primary : itemColors['bg-primary']} 
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+        
         <View style={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingVertical: 40,
+          borderTopWidth: 1,
+          borderTopColor: itemColors['border-default'],
+          paddingTop: 12,
+          gap: 8,
         }}>
-          <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
+          {item.data.attempt_id !== undefined && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="pricetag-outline" size={14} color={itemColors['text-secondary']} style={{ marginRight: 8 }} />
+              <Text style={{
+                fontSize: 13,
+                fontFamily: getFontFamily('medium'),
+                color: itemColors['text-primary'],
+              }}>
+                Attempt ID: <Text style={{ fontFamily: getFontFamily('regular'), color: itemColors['text-secondary'] }}>{item.data.attempt_id}</Text>
+              </Text>
+            </View>
+          )}
+          {item.data.time && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="time-outline" size={14} color={itemColors['text-secondary']} style={{ marginRight: 8 }} />
+              <Text style={{
+                fontSize: 13,
+                fontFamily: getFontFamily('medium'),
+                color: itemColors['text-primary'],
+              }}>
+                Time: <Text style={{ fontFamily: getFontFamily('regular'), color: itemColors['text-secondary'] }}>{item.data.time}</Text>
+              </Text>
+            </View>
+          )}
+          {item.data.reps !== undefined && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="repeat-outline" size={14} color={itemColors['text-secondary']} style={{ marginRight: 8 }} />
+              <Text style={{
+                fontSize: 13,
+                fontFamily: getFontFamily('medium'),
+                color: itemColors['text-primary'],
+              }}>
+                Reps: <Text style={{ fontFamily: getFontFamily('regular'), color: itemColors['text-secondary'] }}>{item.data.reps}</Text>
+              </Text>
+            </View>
+          )}
+          {item.data.weight !== undefined && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="barbell-outline" size={14} color={itemColors['text-secondary']} style={{ marginRight: 8 }} />
+              <Text style={{
+                fontSize: 13,
+                fontFamily: getFontFamily('medium'),
+                color: itemColors['text-primary'],
+              }}>
+                Weight: <Text style={{ fontFamily: getFontFamily('regular'), color: itemColors['text-secondary'] }}>{item.data.weight} kg</Text>
+              </Text>
+            </View>
+          )}
+          {item.data.type_of_activity && (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="list-outline" size={14} color={itemColors['text-secondary']} style={{ marginRight: 8 }} />
+              <Text style={{
+                fontSize: 13,
+                fontFamily: getFontFamily('medium'),
+                color: itemColors['text-primary'],
+              }}>
+                Type: <Text style={{ fontFamily: getFontFamily('regular'), color: itemColors['text-secondary'] }}>{item.data.type_of_activity}</Text>
+              </Text>
+            </View>
+          )}
+          {item.data.is_success !== undefined && (
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center',
+              marginTop: 4,
+            }}>
+              <View style={{
+                width: 20,
+                height: 20,
+                borderRadius: 10,
+                backgroundColor: item.data.is_success 
+                  ? (itemAccent ? itemAccent.primary + '20' : itemColors['text-success'] + '20')
+                  : itemColors['text-danger'] + '20',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 8,
+              }}>
+                <Ionicons 
+                  name={item.data.is_success ? 'checkmark' : 'close'} 
+                  size={12} 
+                  color={item.data.is_success 
+                    ? (itemAccent ? itemAccent.primary : itemColors['text-success'])
+                    : itemColors['text-danger']
+                  } 
+                />
+              </View>
+              <Text style={{
+                fontSize: 13,
+                fontFamily: getFontFamily('medium'),
+                color: itemColors['text-primary'],
+              }}>
+                {item.data.is_success ? 'Success' : 'Failed'}
+              </Text>
+            </View>
+          )}
+          {item.data.note && (
+            <View style={{
+              marginTop: 8,
+              padding: 10,
+              borderRadius: 8,
+              backgroundColor: itemColors['bg-secondary'],
+            }}>
+              <Text style={{
+                fontSize: 12,
+                fontFamily: getFontFamily('regular'),
+                color: itemColors['text-secondary'],
+                fontStyle: 'italic',
+              }}>
+                {item.data.note}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  });
+
+  // Render Metrics Tab
+  const renderMetricsTab = () => {
+    if (!eventTypeId || metricsFields.length === 0) {
+      return (
+        <View style={{ paddingBottom: insets.bottom + 100, alignItems: 'center', paddingVertical: 40 }}>
+          <Ionicons name="stats-chart-outline" size={32} color={colors['text-muted']} />
           <Text style={{
             fontSize: 14,
             fontFamily: getFontFamily('medium'),
             color: colors['text-secondary'],
             marginTop: 12,
           }}>
-            Loading activity...
+            No metrics required for this event
           </Text>
         </View>
-      ) : eventData?.attempts && eventData.attempts.length > 0 ? (
-        eventData.attempts
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          .map((attempt) => (
-            <View
-              key={attempt.id}
+      );
+    }
+
+    return (
+      <View style={{ paddingBottom: insets.bottom + 100 }}>
+        <View style={{
+          borderRadius: 12,
+          padding: 16,
+          marginBottom: 20,
+          borderWidth: 1,
+          borderColor: colors['border-default'],
+          backgroundColor: colors['bg-card'],
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="stats-chart" size={20} color={accent ? accent.primary : colors['bg-primary']} />
+              <Text style={{
+                fontSize: 16,
+                fontFamily: getFontFamily('semibold'),
+                color: colors['text-primary'],
+                marginLeft: 8,
+              }}>
+                Metrics
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                requestAnimationFrame(() => {
+                  setEditingAttemptId(null);
+                  setShowMetricsModal(true);
+                });
+              }}
+              activeOpacity={0.7}
               style={{
-                borderRadius: 12,
-                padding: 12,
-                marginBottom: 8,
-                borderWidth: 1,
-                borderColor: colors['border-default'],
-                backgroundColor: colors['bg-card'],
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 8,
+                backgroundColor: accent ? accent.primary : colors['bg-primary'],
               }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                <Ionicons 
-                  name={
-                    attempt.type === 'metric' ? 'stats-chart' :
-                    attempt.type === 'video' ? 'videocam' :
-                    'document-text'
-                  } 
-                  size={16} 
-                  color={accent ? accent.primary : colors['bg-primary']} 
-                />
+              <Ionicons name="add" size={16} color={isDark ? '#000' : '#FFF'} />
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: isDark ? '#000' : '#FFF',
+                marginLeft: 6,
+              }}>
+                Add Metric
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Current Metrics Display */}
+          <View style={{
+            borderWidth: 1,
+            borderColor: colors['border-default'],
+            borderRadius: 8,
+            padding: 12,
+              backgroundColor: colors['bg-secondary'],
+            }}>
+            {eventData?.time && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <Ionicons name="time-outline" size={16} color={colors['text-secondary']} style={{ marginRight: 8 }} />
                 <Text style={{
-                  fontSize: 13,
+                  fontSize: 14,
                   fontFamily: getFontFamily('medium'),
                   color: colors['text-primary'],
-                  marginLeft: 8,
-                  textTransform: 'capitalize',
                 }}>
-                  {attempt.type}
-                </Text>
-                <Text style={{
-                  fontSize: 12,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                  marginLeft: 'auto',
-                }}>
-                  {new Date(attempt.timestamp).toLocaleString()}
+                  Time: <Text style={{ fontFamily: getFontFamily('regular'), color: colors['text-secondary'] }}>{eventData.time}</Text>
                 </Text>
               </View>
-              {attempt.data.time && (
+            )}
+            {eventData?.weight !== undefined && (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="barbell-outline" size={16} color={colors['text-secondary']} style={{ marginRight: 8 }} />
                 <Text style={{
-                  fontSize: 13,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-primary'],
                 }}>
-                  Time: {attempt.data.time}
+                  Weight: <Text style={{ fontFamily: getFontFamily('regular'), color: colors['text-secondary'] }}>{eventData.weight} kg</Text>
                 </Text>
-              )}
-              {attempt.data.reps !== undefined && (
+              </View>
+            )}
+            {!eventData?.time && !eventData?.weight && (
                 <Text style={{
-                  fontSize: 13,
-                  fontFamily: getFontFamily('regular'),
+                fontSize: 13,
+                fontFamily: getFontFamily('regular'),
                   color: colors['text-secondary'],
+                fontStyle: 'italic',
                 }}>
-                  Reps: {attempt.data.reps}
+                No metrics recorded yet
                 </Text>
-              )}
-              {attempt.data.weight !== undefined && (
-                <Text style={{
-                  fontSize: 13,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                }}>
-                  Weight: {attempt.data.weight} kg
-                </Text>
-              )}
-              {attempt.data.note && (
-                <Text style={{
-                  fontSize: 13,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                  marginTop: 4,
-                }}>
-                  {attempt.data.note}
-                </Text>
-              )}
+            )}
+              </View>
             </View>
-          ))
-      ) : (
-        <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-          <Ionicons name="time-outline" size={32} color={colors['text-muted']} />
+      </View>
+    );
+  };
+
+  // Render Activity Tab - Display Only (populated from Metrics and Videos)
+  const renderActivityTab = () => {
+    return (
+      <View style={{ paddingBottom: insets.bottom + 100 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <Ionicons name="list-outline" size={18} color={accent ? accent.primary : colors['bg-primary']} />
           <Text style={{
-            fontSize: 13,
-            fontFamily: getFontFamily('regular'),
-            color: colors['text-secondary'],
-            marginTop: 8,
+            fontSize: 16,
+            fontFamily: getFontFamily('semibold'),
+            color: colors['text-primary'],
+            marginLeft: 8,
           }}>
-            No activity recorded yet
+            Activity History
           </Text>
+          {sortedAttempts.length > 0 && (
+            <View style={{
+              marginLeft: 8,
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: 12,
+              backgroundColor: accent ? accent.primary + '20' : colors['bg-primary'] + '20',
+            }}>
+              <Text style={{
+                fontSize: 11,
+                fontFamily: getFontFamily('semibold'),
+                color: accent ? accent.primary : colors['bg-primary'],
+              }}>
+                {sortedAttempts.length}
+              </Text>
+            </View>
+          )}
         </View>
-      )}
-    </View>
+
+        {/* Activity History */}
+        <View style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Ionicons name="time-outline" size={18} color={accent ? accent.primary : colors['bg-primary']} />
+          <Text style={{
+              fontSize: 16,
+            fontFamily: getFontFamily('semibold'),
+              color: colors['text-primary'],
+              marginLeft: 8,
+          }}>
+            Activity History
+            </Text>
+            {sortedAttempts.length > 0 && (
+              <View style={{
+                marginLeft: 8,
+                paddingHorizontal: 8,
+                paddingVertical: 2,
+                borderRadius: 12,
+                backgroundColor: accent ? accent.primary + '20' : colors['bg-primary'] + '20',
+              }}>
+                <Text style={{
+                  fontSize: 11,
+                  fontFamily: getFontFamily('semibold'),
+                  color: accent ? accent.primary : colors['bg-primary'],
+                }}>
+                  {sortedAttempts.length}
+          </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {isLoadingActivity ? (
+          <View style={{
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 60,
+          }}>
+            <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
+            <Text style={{
+              fontSize: 14,
+              fontFamily: getFontFamily('medium'),
+              color: colors['text-secondary'],
+              marginTop: 12,
+            }}>
+              Loading activity...
+            </Text>
+          </View>
+        ) : sortedAttempts.length > 0 ? (
+          <FlatList
+            data={sortedAttempts}
+            renderItem={({ item }) => (
+              <ActivityItem 
+                item={item} 
+                colors={colors}
+                accent={accent}
+                isDark={isDark}
+                onEdit={(attemptId) => {
+                  setEditingAttemptId(attemptId);
+                  setShowMetricsModal(true);
+                }}
+              />
+            )}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            removeClippedSubviews={true}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            ListEmptyComponent={
+              <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                <Ionicons name="time-outline" size={32} color={colors['text-muted']} />
+                  <Text style={{
+                    fontSize: 13,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-secondary'],
+                  marginTop: 8,
+                  }}>
+                  No activity recorded yet
+                  </Text>
+                </View>
+            }
+          />
+        ) : (
+          <View style={{ 
+            alignItems: 'center', 
+            paddingVertical: 40,
+            paddingHorizontal: 20,
+          }}>
+            <View style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              backgroundColor: colors['bg-secondary'],
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16,
+            }}>
+              <Ionicons name="time-outline" size={32} color={colors['text-muted']} />
+            </View>
+                  <Text style={{
+              fontSize: 15,
+              fontFamily: getFontFamily('semibold'),
+              color: colors['text-primary'],
+              marginBottom: 4,
+                  }}>
+              No activity yet
+                  </Text>
+                  <Text style={{
+                    fontSize: 13,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-secondary'],
+              textAlign: 'center',
+                  }}>
+              Start tracking activities by adding your first attempt
+                  </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Memoized metrics fields
+  const memoizedMetricsFields = useMemo(() => {
+    return metricsFields.map(field => renderMetricsField(field));
+  }, [metricsFields, formValues, colors, accent, isDark]);
+
+  // Memoized activity fields
+  const memoizedActivityFields = useMemo(() => {
+    return activityFields.map(field => renderActivityField(field));
+  }, [activityFields, formValues, colors, accent, isDark]);
+
+
+  // Handle Metrics Submit
+  const handleSubmitMetrics = async () => {
+    if (!tournamentId || !eventId || !participantId || !eventTypeId) return;
+
+    const validatedValues: Record<string, any> = {};
+    for (const field of metricsFields) {
+      // Skip validation for is_success as it has a default value
+      if (field === 'is_success') {
+        validatedValues[field] = formValues[field] !== undefined 
+          ? (formValues[field] === true || formValues[field] === 'true')
+          : true; // Default to true
+        continue;
+      }
+      
+      const value = formValues[field];
+      const isEmpty = value === undefined || value === null || value === '' || 
+                     (typeof value === 'string' && value.trim() === '');
+      
+      if (isEmpty && requiredFields.includes(field)) {
+        Alert.alert('Error', `${FIELD_LABELS[field]} is required`);
+        return;
+      }
+      
+      validatedValues[field] = typeof value === 'string' ? value.trim() : value;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // Get attempt_id from form or use calculated next attempt_id
+      const attemptId = validatedValues['attempt_id'] !== undefined
+        ? (typeof validatedValues['attempt_id'] === 'number' 
+            ? validatedValues['attempt_id'] 
+            : parseInt(validatedValues['attempt_id']))
+        : (formValues['attempt_id'] !== undefined
+            ? (typeof formValues['attempt_id'] === 'number'
+                ? formValues['attempt_id']
+                : parseInt(formValues['attempt_id']))
+            : getNextAttemptId);
+
+      // Prepare activity data for backend
+      const activityData: AddActivityData = {
+        event_id: parseInt(eventId),
+        participant_id: parseInt(participantId),
+        attempt_id: attemptId,
+        type_of_activity: activityType || event?.name || '',
+        weight: validatedValues['weight'] ? parseFloat(validatedValues['weight']) : null,
+        time: validatedValues['time'] ? parseTimeToSeconds(validatedValues['time']) : null,
+        is_success: validatedValues['is_success'] !== undefined 
+          ? (validatedValues['is_success'] === true || validatedValues['is_success'] === 'true')
+          : (formValues['is_success'] !== undefined 
+              ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
+              : true), // Default to true
+        reps: null,
+        is_deleted: false,
+      };
+
+      await addActivity(activityData);
+
+      // Update local state
+      const updateData: Record<string, any> = {};
+      metricsFields.forEach(field => {
+        if (formValues[field] !== undefined) {
+          updateData[field] = formValues[field];
+        }
+      });
+      // Always include is_success (default to true if not set)
+      updateData.is_success = formValues['is_success'] !== undefined 
+        ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
+        : true;
+
+      updateEventParticipantData(tournamentId, eventId, participantId, updateData);
+      addEventParticipantAttempt(tournamentId, eventId, participantId, {
+        type: 'metric',
+        data: updateData,
+      });
+
+      setEditingAttemptId(null);
+      setFormValues({});
+      setIsSubmitting(false);
+      setShowMetricsModal(false);
+      Alert.alert('Success', editingAttemptId ? 'Metric updated successfully' : 'Metric added successfully');
+    } catch (error: any) {
+      console.error('Error saving metric:', error);
+      setIsSubmitting(false);
+      Alert.alert('Error', error.message || 'Failed to add metric');
+    }
+  };
+
+  // Render Metrics Modal
+  const renderMetricsModal = () => (
+    <Modal
+      visible={showMetricsModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        if (!isSubmitting) {
+          setShowMetricsModal(false);
+          setFormValues({});
+        }
+      }}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <Pressable
+          style={{
+            flex: 1,
+            justifyContent: 'flex-end',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          }}
+          onPress={() => {
+            if (!isSubmitting) {
+              setShowMetricsModal(false);
+              setFormValues({});
+            }
+          }}
+        >
+          <Pressable
+            style={{
+              backgroundColor: colors['bg-card'],
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              paddingTop: 20,
+              paddingBottom: insets.bottom + 20,
+              paddingHorizontal: 16,
+              maxHeight: '90%',
+            }}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              marginBottom: 20,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons name="stats-chart" size={24} color={accent ? accent.primary : colors['bg-primary']} />
+                  <Text style={{
+                  fontSize: 18,
+                  fontFamily: getFontFamily('semibold'),
+                  color: colors['text-primary'],
+                  marginLeft: 8,
+                  }}>
+                  {editingAttemptId ? 'Edit Metric' : 'Add Metric'}
+                  </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (!isSubmitting) {
+                    setShowMetricsModal(false);
+                    setEditingAttemptId(null);
+                    setFormValues({});
+                  }
+                }}
+                disabled={isSubmitting}
+              >
+                <Ionicons name="close" size={24} color={colors['text-secondary']} />
+              </TouchableOpacity>
+          </View>
+
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              {memoizedMetricsFields}
+
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, marginBottom: 10 }}>
+                <Button
+                  title="Cancel"
+                  onPress={() => {
+                    if (!isSubmitting) {
+                      setShowMetricsModal(false);
+                      setEditingAttemptId(null);
+                      setFormValues({});
+                    }
+                  }}
+                  variant="outline"
+                  size="medium"
+                  disabled={isSubmitting}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  title={isSubmitting ? (editingAttemptId ? "Updating..." : "Adding...") : (editingAttemptId ? "Update Metric" : "Add Metric")}
+                  onPress={handleSubmitMetrics}
+                  variant="primary"
+                  size="medium"
+                  disabled={isSubmitting}
+                  style={{ flex: 1 }}
+                />
+      </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+    );
+
+  // Render Add Activity Modal
+  const renderAddActivityModal = () => (
+    <Modal
+      visible={showAddActivityModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => {
+        if (!isSubmitting) {
+          setShowAddActivityModal(false);
+          setFormValues({});
+        }
+      }}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <Pressable
+        style={{
+          flex: 1,
+          justifyContent: 'flex-end',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        }}
+        onPress={() => {
+          if (!isSubmitting) {
+            setShowAddActivityModal(false);
+            setFormValues({});
+          }
+        }}
+      >
+        <Pressable
+          style={{
+            backgroundColor: colors['bg-card'],
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            paddingTop: 20,
+            paddingBottom: insets.bottom + 20,
+            paddingHorizontal: 16,
+            maxHeight: '90%',
+          }}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <View style={{ 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            marginBottom: 20,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="add-circle" size={24} color={accent ? accent.primary : colors['bg-primary']} />
+              <Text style={{
+                fontSize: 18,
+                fontFamily: getFontFamily('semibold'),
+                color: colors['text-primary'],
+                marginLeft: 8,
+              }}>
+                Add Activity
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => {
+                if (!isSubmitting) {
+                  setShowAddActivityModal(false);
+                  setFormValues({});
+                }
+              }}
+              disabled={isSubmitting}
+            >
+              <Ionicons name="close" size={24} color={colors['text-secondary']} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Form Content */}
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 20 }}
+          >
+              {memoizedActivityFields}
+
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, marginBottom: 10 }}>
+              <Button
+                title="Cancel"
+                onPress={() => {
+                  if (!isSubmitting) {
+                    setShowAddActivityModal(false);
+                    setFormValues({});
+                  }
+                }}
+                variant="outline"
+                size="medium"
+                disabled={isSubmitting}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title={isSubmitting ? "Adding..." : "Add Activity"}
+                onPress={handleSubmitForm}
+                variant="primary"
+                size="medium"
+                disabled={isSubmitting}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 
   return (
@@ -1082,7 +1529,7 @@ export default function EventParticipantDetailScreen() {
             </View>
           </View>
 
-          {/* Lightweight Tabs */}
+          {/* Tabs */}
           <TabSwitch
             tabs={['Metrics', 'Videos', 'Activity']}
             activeTab={activeTab}
@@ -1098,6 +1545,12 @@ export default function EventParticipantDetailScreen() {
           </View>
         </ScrollView>
       </View>
+
+      {/* Add Metrics Modal */}
+      {renderMetricsModal()}
+      
+      {/* Add Activity Modal */}
+      {renderAddActivityModal()}
     </SafeAreaView>
   );
 }

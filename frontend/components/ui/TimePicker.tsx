@@ -1,219 +1,341 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput } from 'react-native';
 import { useColors } from '../../utils/colors';
 import { getFontFamily } from '../../utils/fonts';
 
 interface TimePickerProps {
-  value: string; // Format: "MM:SS" or "HH:MM:SS"
+  value: string; // Format: "MM:SS" or "HH:MM:SS" or "MM:SS:MS" or "MM:SS:MS:US"
   onChange: (time: string) => void;
   isDark: boolean;
   accentColor?: string;
+  precision?: 'milliseconds' | 'microseconds'; // Precision level
 }
 
-export default function TimePicker({ value, onChange, isDark, accentColor }: TimePickerProps) {
+export default function TimePicker({ value, onChange, isDark, accentColor, precision = 'milliseconds' }: TimePickerProps) {
   const colors = useColors(isDark);
+  const useMicroseconds = precision === 'microseconds';
   
-  // Parse time string to hours, minutes, seconds
-  const parseTime = (timeStr: string): { hours: number; minutes: number; seconds: number } => {
+  // Parse time string to minutes, seconds, milliseconds, microseconds
+  const parseTime = (timeStr: string): { minutes: number; seconds: number; milliseconds: number; microseconds: number } => {
     const parts = timeStr.split(':').map(Number);
     if (parts.length === 2) {
-      return { hours: 0, minutes: parts[0] || 0, seconds: parts[1] || 0 };
+      // MM:SS format
+      return { minutes: parts[0] || 0, seconds: parts[1] || 0, milliseconds: 0, microseconds: 0 };
     } else if (parts.length === 3) {
-      return { hours: parts[0] || 0, minutes: parts[1] || 0, seconds: parts[2] || 0 };
+      // Check if third part is hours (0-23) or milliseconds (0-999)
+      if (parts[0] < 24 && parts[1] < 60 && parts[2] < 60) {
+        // HH:MM:SS format - convert to MM:SS:MS
+        const totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return { 
+          minutes: Math.floor(totalSeconds / 60), 
+          seconds: totalSeconds % 60, 
+          milliseconds: 0,
+          microseconds: 0
+        };
+      } else {
+        // MM:SS:MS format
+        return { 
+          minutes: parts[0] || 0, 
+          seconds: parts[1] || 0, 
+          milliseconds: parts[2] || 0,
+          microseconds: 0
+        };
+      }
+    } else if (parts.length === 4) {
+      // MM:SS:MS:US format
+      return { 
+        minutes: parts[0] || 0, 
+        seconds: parts[1] || 0, 
+        milliseconds: parts[2] || 0,
+        microseconds: parts[3] || 0
+      };
     }
-    return { hours: 0, minutes: 0, seconds: 0 };
+    return { minutes: 0, seconds: 0, milliseconds: 0, microseconds: 0 };
   };
 
-  const { hours, minutes, seconds } = parseTime(value);
-  const [localHours, setLocalHours] = useState(hours);
+  // Format time as MM:SS:MS or MM:SS:MS:US
+  const formatTime = (m: number, s: number, ms: number, us: number = 0): string => {
+    if (useMicroseconds) {
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${ms.toString().padStart(3, '0')}:${us.toString().padStart(3, '0')}`;
+    }
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${ms.toString().padStart(3, '0')}`;
+  };
+
+  const { minutes, seconds, milliseconds, microseconds } = parseTime(value);
   const [localMinutes, setLocalMinutes] = useState(minutes);
   const [localSeconds, setLocalSeconds] = useState(seconds);
-  
-  const hoursScrollRef = useRef<ScrollView>(null);
-  const minutesScrollRef = useRef<ScrollView>(null);
-  const secondsScrollRef = useRef<ScrollView>(null);
+  const [localMilliseconds, setLocalMilliseconds] = useState(milliseconds);
+  const [localMicroseconds, setLocalMicroseconds] = useState(microseconds);
 
   // Sync local state with value prop
   useEffect(() => {
     const parsed = parseTime(value);
-    setLocalHours(parsed.hours);
     setLocalMinutes(parsed.minutes);
     setLocalSeconds(parsed.seconds);
+    setLocalMilliseconds(parsed.milliseconds);
+    setLocalMicroseconds(parsed.microseconds);
   }, [value]);
 
-  const formatTime = (h: number, m: number, s: number): string => {
-    if (h > 0) {
-      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  // Handle individual field changes
+  const handleMinutesChange = (text: string) => {
+    // Allow empty string for better UX
+    if (text === '') {
+      setLocalMinutes(0);
+      onChange(formatTime(0, localSeconds, localMilliseconds, localMicroseconds));
+      return;
     }
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    const num = Math.max(0, Math.min(999, parseInt(text) || 0));
+    setLocalMinutes(num);
+    const formatted = formatTime(num, localSeconds, localMilliseconds, localMicroseconds);
+    onChange(formatted);
   };
 
-  const handleValueChange = (type: 'hours' | 'minutes' | 'seconds', newValue: number) => {
-    let newHours = localHours;
-    let newMinutes = localMinutes;
-    let newSeconds = localSeconds;
-
-    if (type === 'hours') {
-      newHours = Math.max(0, Math.min(23, newValue));
-      setLocalHours(newHours);
-    } else if (type === 'minutes') {
-      newMinutes = Math.max(0, Math.min(59, newValue));
-      setLocalMinutes(newMinutes);
-    } else if (type === 'seconds') {
-      newSeconds = Math.max(0, Math.min(59, newValue));
-      setLocalSeconds(newSeconds);
+  const handleSecondsChange = (text: string) => {
+    if (text === '') {
+      setLocalSeconds(0);
+      onChange(formatTime(localMinutes, 0, localMilliseconds, localMicroseconds));
+      return;
     }
-
-    onChange(formatTime(newHours, newMinutes, newSeconds));
+    const num = Math.max(0, Math.min(59, parseInt(text) || 0));
+    setLocalSeconds(num);
+    const formatted = formatTime(localMinutes, num, localMilliseconds, localMicroseconds);
+    onChange(formatted);
   };
 
-  // Scroll to selected values
-  useEffect(() => {
-    const ITEM_HEIGHT = 50;
-    if (hoursScrollRef.current) {
-      hoursScrollRef.current.scrollTo({
-        y: localHours * ITEM_HEIGHT,
-        animated: false,
-      });
+  const handleMillisecondsChange = (text: string) => {
+    if (text === '') {
+      setLocalMilliseconds(0);
+      onChange(formatTime(localMinutes, localSeconds, 0, localMicroseconds));
+      return;
     }
-    if (minutesScrollRef.current) {
-      minutesScrollRef.current.scrollTo({
-        y: localMinutes * ITEM_HEIGHT,
-        animated: false,
-      });
-    }
-    if (secondsScrollRef.current) {
-      secondsScrollRef.current.scrollTo({
-        y: localSeconds * ITEM_HEIGHT,
-        animated: false,
-      });
-    }
-  }, [localHours, localMinutes, localSeconds]);
-
-  const renderNumberSelector = (
-    label: string,
-    value: number,
-    max: number,
-    onChange: (val: number) => void,
-    scrollRef: React.RefObject<ScrollView>
-  ) => {
-    const numbers = Array.from({ length: max + 1 }, (_, i) => i);
-    const ITEM_HEIGHT = 50;
-
-    return (
-      <View style={{ flex: 1, alignItems: 'center' }}>
-        <Text style={{
-          fontSize: 11,
-          fontFamily: getFontFamily('medium'),
-          color: colors['text-secondary'],
-          marginBottom: 10,
-          textTransform: 'uppercase',
-          letterSpacing: 0.5,
-        }}>
-          {label}
-        </Text>
-        <View style={{
-          height: 150,
-          width: 70,
-          borderRadius: 14,
-          backgroundColor: colors['bg-card'],
-          borderWidth: 1.5,
-          borderColor: accentColor ? accentColor + '20' : colors['border-default'],
-          overflow: 'hidden',
-        }}>
-          {/* Center indicator line */}
-          <View style={{
-            position: 'absolute',
-            top: (150 - ITEM_HEIGHT) / 2,
-            left: 0,
-            right: 0,
-            height: ITEM_HEIGHT,
-            borderTopWidth: 1,
-            borderBottomWidth: 1,
-            borderColor: accentColor ? accentColor + '30' : colors['border-default'],
-            zIndex: 1,
-            pointerEvents: 'none',
-          }} />
-          
-          <ScrollView
-            ref={scrollRef}
-            contentContainerStyle={{ 
-              alignItems: 'center', 
-              paddingVertical: (150 - ITEM_HEIGHT) / 2,
-            }}
-            showsVerticalScrollIndicator={false}
-            snapToInterval={ITEM_HEIGHT}
-            decelerationRate="fast"
-            onMomentumScrollEnd={(e) => {
-              const offsetY = e.nativeEvent.contentOffset.y;
-              const index = Math.round(offsetY / ITEM_HEIGHT);
-              const newValue = Math.max(0, Math.min(max, index));
-              if (newValue !== value) {
-                onChange(newValue);
-              }
-            }}
-            scrollEventThrottle={16}
-          >
-            {numbers.map((num) => (
-              <View
-                key={num}
-                style={{
-                  height: ITEM_HEIGHT,
-                  width: '100%',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text style={{
-                  fontSize: num === value ? 24 : 18,
-                  fontFamily: num === value ? getFontFamily('bold') : getFontFamily('regular'),
-                  color: num === value
-                    ? (accentColor || colors['bg-primary'])
-                    : colors['text-secondary'],
-                }}>
-                  {num.toString().padStart(2, '0')}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    );
+    const num = Math.max(0, Math.min(999, parseInt(text) || 0));
+    setLocalMilliseconds(num);
+    const formatted = formatTime(localMinutes, localSeconds, num, localMicroseconds);
+    onChange(formatted);
   };
 
+  const handleMicrosecondsChange = (text: string) => {
+    if (text === '') {
+      setLocalMicroseconds(0);
+      onChange(formatTime(localMinutes, localSeconds, localMilliseconds, 0));
+      return;
+    }
+    const num = Math.max(0, Math.min(999, parseInt(text) || 0));
+    setLocalMicroseconds(num);
+    const formatted = formatTime(localMinutes, localSeconds, localMilliseconds, num);
+    onChange(formatted);
+  };
+
+  // Text input version for all platforms
   return (
-    <View style={{
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 16,
-      paddingVertical: 20,
-    }}>
-      {renderNumberSelector('Hours', localHours, 23, (val) => handleValueChange('hours', val), hoursScrollRef)}
-      
-      <View style={{ alignItems: 'center', paddingTop: 30 }}>
-        <Text style={{
-          fontSize: 28,
-          fontFamily: getFontFamily('bold'),
-          color: colors['text-primary'],
-        }}>
-          :
-        </Text>
-      </View>
+    <View style={{ paddingVertical: 10 }}>
+      <View style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        gap: 8,
+      }}>
+        {/* Minutes Input */}
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={{
+            fontSize: 11,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-secondary'],
+            marginBottom: 6,
+            textTransform: 'uppercase',
+          }}>
+            Minutes
+          </Text>
+          <TextInput
+            value={localMinutes.toString()}
+            onChangeText={handleMinutesChange}
+            placeholder="0"
+            placeholderTextColor={colors['text-secondary']}
+            keyboardType="numeric"
+            maxLength={3}
+            style={{
+              borderWidth: 1,
+              borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-primary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 18,
+              textAlign: 'center',
+              width: '100%',
+            }}
+          />
+          <Text style={{
+            fontSize: 10,
+            fontFamily: getFontFamily('regular'),
+            color: colors['text-muted'],
+            marginTop: 4,
+          }}>
+            0-999
+          </Text>
+        </View>
 
-      {renderNumberSelector('Minutes', localMinutes, 59, (val) => handleValueChange('minutes', val), minutesScrollRef)}
-      
-      <View style={{ alignItems: 'center', paddingTop: 30 }}>
-        <Text style={{
-          fontSize: 28,
-          fontFamily: getFontFamily('bold'),
-          color: colors['text-primary'],
-        }}>
-          :
-        </Text>
-      </View>
+        {/* Separator */}
+        <View style={{ alignItems: 'center', paddingTop: 30 }}>
+          <Text style={{
+            fontSize: 24,
+            fontFamily: getFontFamily('bold'),
+            color: colors['text-primary'],
+          }}>
+            :
+          </Text>
+        </View>
 
-      {renderNumberSelector('Seconds', localSeconds, 59, (val) => handleValueChange('seconds', val), secondsScrollRef)}
+        {/* Seconds Input */}
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={{
+            fontSize: 11,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-secondary'],
+            marginBottom: 6,
+            textTransform: 'uppercase',
+          }}>
+            Seconds
+          </Text>
+          <TextInput
+            value={localSeconds.toString()}
+            onChangeText={handleSecondsChange}
+            placeholder="0"
+            placeholderTextColor={colors['text-secondary']}
+            keyboardType="numeric"
+            maxLength={2}
+            style={{
+              borderWidth: 1,
+              borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-primary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 18,
+              textAlign: 'center',
+              width: '100%',
+            }}
+          />
+          <Text style={{
+            fontSize: 10,
+            fontFamily: getFontFamily('regular'),
+            color: colors['text-muted'],
+            marginTop: 4,
+          }}>
+            0-59
+          </Text>
+        </View>
+
+        {/* Separator */}
+        <View style={{ alignItems: 'center', paddingTop: 30 }}>
+          <Text style={{
+            fontSize: 24,
+            fontFamily: getFontFamily('bold'),
+            color: colors['text-primary'],
+          }}>
+            :
+          </Text>
+        </View>
+
+        {/* Milliseconds Input */}
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={{
+            fontSize: 11,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-secondary'],
+            marginBottom: 6,
+            textTransform: 'uppercase',
+          }}>
+            MS
+          </Text>
+          <TextInput
+            value={localMilliseconds.toString()}
+            onChangeText={handleMillisecondsChange}
+            placeholder="0"
+            placeholderTextColor={colors['text-secondary']}
+            keyboardType="numeric"
+            maxLength={3}
+            style={{
+              borderWidth: 1,
+              borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-primary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 18,
+              textAlign: 'center',
+              width: '100%',
+            }}
+          />
+          <Text style={{
+            fontSize: 10,
+            fontFamily: getFontFamily('regular'),
+            color: colors['text-muted'],
+            marginTop: 4,
+          }}>
+            0-999
+          </Text>
+        </View>
+
+        {useMicroseconds && (
+          <>
+            {/* Separator */}
+            <View style={{ alignItems: 'center', paddingTop: 30 }}>
+              <Text style={{
+                fontSize: 24,
+                fontFamily: getFontFamily('bold'),
+                color: colors['text-primary'],
+              }}>
+                :
+              </Text>
+            </View>
+
+            {/* Microseconds Input */}
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{
+                fontSize: 11,
+                fontFamily: getFontFamily('medium'),
+                color: colors['text-secondary'],
+                marginBottom: 6,
+                textTransform: 'uppercase',
+              }}>
+                US
+              </Text>
+              <TextInput
+                value={localMicroseconds.toString()}
+                onChangeText={handleMicrosecondsChange}
+                placeholder="0"
+                placeholderTextColor={colors['text-secondary']}
+                keyboardType="numeric"
+                maxLength={3}
+                style={{
+                  borderWidth: 1,
+                  borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+                  borderRadius: 8,
+                  padding: 12,
+                  color: colors['text-primary'],
+                  fontFamily: getFontFamily('regular'),
+                  backgroundColor: colors['bg-secondary'],
+                  fontSize: 18,
+                  textAlign: 'center',
+                  width: '100%',
+                }}
+              />
+              <Text style={{
+                fontSize: 10,
+                fontFamily: getFontFamily('regular'),
+                color: colors['text-muted'],
+                marginTop: 4,
+              }}>
+                0-999
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
     </View>
   );
 }

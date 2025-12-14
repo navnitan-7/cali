@@ -11,6 +11,14 @@ ACTIVITY_FIELDS_BY_EVENT = {
     3: ["attempt_id", "time", "type_of_activity", "is_success"],
     4: ["attempt_id", "time", "type_of_activity", "is_success"]
 }
+
+MAX_ATTEMPTS_PER_EVENT = {
+    1: 1,
+    2: 6,
+    3: 1,
+    4: 1
+}
+
 router = APIRouter(prefix="/activity", tags=["activity"])
 
 @router.post("/get_metrics/event_id/{event_id}")
@@ -25,6 +33,7 @@ async def get_metrics(event_id: int, participant_id: int, current_user: dict = D
 @router.post("/add_activity/")
 async def add_activity(activity: Activity, current_user: dict = Depends(get_current_user)):
     # Validate event_id exists in constants
+    print(activity.event_id)
     if activity.event_id not in ACTIVITY_FIELDS_BY_EVENT:
         raise HTTPException(status_code=400, detail="Invalid event id")
     

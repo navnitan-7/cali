@@ -21,9 +21,11 @@ interface Participant {
 export interface EventParticipantData {
   participantId: string;
   // Metrics
-  time?: string; // Format: "MM:SS" or "HH:MM:SS"
+  time?: string; // Format: "MM:SS" or "HH:MM:SS" or "MM:SS:MS:US"
   reps?: number;
   weight?: number; // Weight lifted in kg
+  type_of_activity?: string;
+  is_success?: boolean;
   // Videos
   videos?: Array<{ 
     id: string;
@@ -37,9 +39,12 @@ export interface EventParticipantData {
     timestamp: string;
     type: 'metric' | 'video' | 'note';
     data: {
+      attempt_id?: number;
       time?: string;
       reps?: number;
       weight?: number;
+      type_of_activity?: string;
+      is_success?: boolean;
       videoUri?: string;
       note?: string;
     };
