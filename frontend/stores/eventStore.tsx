@@ -32,8 +32,8 @@ interface EventStore {
   
   // Local methods
   addEvent: (event: EventDataWithId) => Promise<string>; // Returns event ID
-  updateEvent: (id: string, event: Partial<EventDataWithId>) => void;
-  deleteEvent: (id: string) => void;
+  updateEvent: (id: string, event: Partial<EventDataWithId>) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
   addParticipant: (eventId: string, participant: Omit<Participant, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updateParticipant: (eventId: string, participantId: string, participant: Partial<Participant>) => Promise<void>;
   deleteParticipant: (eventId: string, participantId: string) => void;
@@ -241,17 +241,73 @@ export const useEventStore = create<EventStore>()(
           throw error;
         }
       },
-      updateEvent: (id, updates) => {
-        set((state) => ({
-          events: state.events.map((event) =>
-            event.id === id ? { ...event, ...updates } : event
-          ),
-        }));
+      updateEvent: async (id, updates) => {
+        try {
+          set({ isLoading: true, error: null });
+          console.log('[EventStore] Updating event in backend:', id, updates);
+          
+          // Get current event data
+          const currentEvent = get().events.find(e => e.id === id);
+          if (!currentEvent) {
+            throw new Error('Event not found');
+          }
+
+          // Get event types from backend to map category to event_type ID
+          const eventTypes = await eventService.getEventTypes();
+          
+          // Find event type by name (category)
+          let eventTypeId = 1; // Default to first event type
+          const category = updates.category || currentEvent.category;
+          const eventType = eventTypes.find(et => et.name === category);
+          if (eventType) {
+            eventTypeId = eventType.id;
+          } else if (eventTypes.length > 0) {
+            // If category doesn't match, use first available event type
+            eventTypeId = eventTypes[0].id;
+          }
+
+          // Call backend API to update event
+          await eventService.updateEvent(parseInt(id), {
+            name: updates.name || currentEvent.name,
+            description: updates.description || currentEvent.description || '',
+            event_type: eventTypeId,
+          });
+
+          console.log('[EventStore] Event updated successfully');
+          
+          // Update local state
+          set((state) => ({
+            events: state.events.map((event) =>
+              event.id === id ? { ...event, ...updates, updatedAt: new Date().toISOString() } : event
+            ),
+            isLoading: false,
+          }));
+        } catch (error: any) {
+          console.error('[EventStore] Error updating event:', error);
+          set({ error: error.message || 'Failed to update event', isLoading: false });
+          throw error;
+        }
       },
-      deleteEvent: (id) => {
-        set((state) => ({
-          events: state.events.filter((event) => event.id !== id),
-        }));
+      deleteEvent: async (id) => {
+        try {
+          set({ isLoading: true, error: null });
+          console.log('[EventStore] Deleting event in backend:', id);
+          
+          // Call backend API to delete event
+          await eventService.deleteEvent(parseInt(id));
+          
+          console.log('[EventStore] Event deleted successfully');
+          
+          // Update local state
+          set((state) => ({
+            events: state.events.filter((event) => event.id !== id),
+            isLoading: false,
+          }));
+        } catch (error: any) {
+          console.error('[EventStore] Error deleting event:', error);
+          set({ error: error.message || 'Failed to delete event', isLoading: false });
+          throw error;
+        }
       },
       addParticipant: async (eventId, participant) => {
         try {

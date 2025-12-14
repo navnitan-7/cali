@@ -15,6 +15,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   variant?: 'danger' | 'default';
+  loading?: boolean;
 }
 
 export default function ConfirmDialog({
@@ -26,6 +27,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
   variant = 'default',
+  loading = false,
 }: ConfirmDialogProps) {
   const theme = useTheme();
   const isDark = theme === 'dark';
@@ -36,7 +38,7 @@ export default function ConfirmDialog({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onCancel}
+      onRequestClose={loading ? undefined : onCancel}
     >
       <Pressable
         style={{
@@ -46,7 +48,7 @@ export default function ConfirmDialog({
           backgroundColor: 'rgba(0, 0, 0, 0.4)',
           paddingHorizontal: 20,
         }}
-        onPress={onCancel}
+        onPress={loading ? undefined : onCancel}
       >
         <Pressable
           style={{
@@ -113,12 +115,15 @@ export default function ConfirmDialog({
               onPress={onCancel}
               variant="outline"
               style={{ flex: 1 }}
+              disabled={loading}
             />
             <Button
               title={confirmText}
               onPress={onConfirm}
               variant={variant === 'danger' ? 'danger' : 'primary'}
               style={{ flex: 1 }}
+              loading={loading}
+              disabled={loading}
             />
           </View>
         </Pressable>

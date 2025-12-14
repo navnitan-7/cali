@@ -234,7 +234,7 @@ export default function CreateEventScreen() {
       setIsSaving(true);
       
       if (isEditMode && eventId && tournamentId) {
-        updateEvent(tournamentId, eventId, {
+        await updateEvent(tournamentId, eventId, {
           ...data,
           participantIds: selectedParticipantIds,
           status: 'active',

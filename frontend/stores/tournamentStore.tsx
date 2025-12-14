@@ -96,8 +96,8 @@ interface TournamentStore {
   
   // Event management
   addEvent: (tournamentId: string, event: Omit<Event, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
-  updateEvent: (tournamentId: string, eventId: string, updates: Partial<Event>) => void;
-  deleteEvent: (tournamentId: string, eventId: string) => void;
+  updateEvent: (tournamentId: string, eventId: string, updates: Partial<Event>) => Promise<void>;
+  deleteEvent: (tournamentId: string, eventId: string) => Promise<void>;
   getEvent: (tournamentId: string, eventId: string) => Event | undefined;
   
   // Event participant management (linking tournament participants to events)
@@ -781,36 +781,98 @@ export const useTournamentStore = create<TournamentStore>()(
         }
       },
       
-      updateEvent: (tournamentId, eventId, updates) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((tournament) =>
-            tournament.id === tournamentId
-              ? {
-                  ...tournament,
-                  events: tournament.events.map((event) =>
-                    event.id === eventId
-                      ? { ...event, ...updates, updatedAt: new Date().toISOString() }
-                      : event
-                  ),
-                  updatedAt: new Date().toISOString(),
-                }
-              : tournament
-          ),
-        }));
+      updateEvent: async (tournamentId, eventId, updates) => {
+        try {
+          console.log('[TournamentStore] Updating event in backend:', tournamentId, eventId, updates);
+          
+          // Get current event data
+          const tournament = get().tournaments.find(t => t.id === tournamentId);
+          const currentEvent = tournament?.events.find(e => e.id === eventId);
+          
+          if (!currentEvent) {
+            throw new Error('Event not found');
+          }
+
+          // Get event types from backend to map category to event_type ID
+          const eventTypes = await eventService.getEventTypes();
+          
+          // Find event type by name (category)
+          let eventTypeId = 1; // Default to first event type
+          const category = updates.category || currentEvent.category;
+          const eventType = eventTypes.find(et => et.name === category);
+          if (eventType) {
+            eventTypeId = eventType.id;
+          } else if (eventTypes.length > 0) {
+            // If category doesn't match, use first available event type
+            eventTypeId = eventTypes[0].id;
+          }
+
+          // Call backend API to update event
+          await eventService.updateEvent(parseInt(eventId), {
+            name: updates.name || currentEvent.name,
+            description: updates.description || currentEvent.description || '',
+            event_type: eventTypeId,
+          });
+
+          console.log('[TournamentStore] Event updated successfully');
+          
+          // Update local state
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) =>
+              tournament.id === tournamentId
+                ? {
+                    ...tournament,
+                    events: tournament.events.map((event) =>
+                      event.id === eventId
+                        ? { ...event, ...updates, updatedAt: new Date().toISOString() }
+                        : event
+                    ),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : tournament
+            ),
+          }));
+          
+          // Sync events for this specific tournament to ensure UI is updated
+          get().syncEventsOnly(tournamentId).catch(err => {
+            console.error('[TournamentStore] Error syncing after event update:', err);
+          });
+        } catch (error) {
+          console.error('[TournamentStore] Error updating event:', error);
+          throw error;
+        }
       },
       
-      deleteEvent: (tournamentId, eventId) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((tournament) =>
-            tournament.id === tournamentId
-              ? {
-                  ...tournament,
-                  events: tournament.events.filter((event) => event.id !== eventId),
-                  updatedAt: new Date().toISOString(),
-                }
-              : tournament
-          ),
-        }));
+      deleteEvent: async (tournamentId, eventId) => {
+        try {
+          console.log('[TournamentStore] Deleting event in backend:', tournamentId, eventId);
+          
+          // Call backend API to delete event
+          await eventService.deleteEvent(parseInt(eventId));
+          
+          console.log('[TournamentStore] Event deleted successfully');
+          
+          // Update local state
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) =>
+              tournament.id === tournamentId
+                ? {
+                    ...tournament,
+                    events: tournament.events.filter((event) => event.id !== eventId),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : tournament
+            ),
+          }));
+          
+          // Sync events for this specific tournament to ensure UI is updated
+          get().syncEventsOnly(tournamentId).catch(err => {
+            console.error('[TournamentStore] Error syncing after event deletion:', err);
+          });
+        } catch (error) {
+          console.error('[TournamentStore] Error deleting event:', error);
+          throw error;
+        }
       },
       
       getEvent: (tournamentId, eventId) => {

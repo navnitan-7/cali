@@ -4,6 +4,7 @@ import {
   participantService,
   activityService,
   CreateEventData,
+  UpdateEventData,
   CreateParticipantData,
   UpdateParticipantData,
   AddActivityData,
@@ -88,6 +89,36 @@ export const useEventApi = () => {
     }
   }, []);
 
+  const updateEvent = useCallback(async (id: number, data: UpdateEventData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await eventService.updateEvent(id, data);
+      return result;
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || 'Failed to update event';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const deleteEvent = useCallback(async (id: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await eventService.deleteEvent(id);
+      return result;
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || 'Failed to delete event';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -96,6 +127,8 @@ export const useEventApi = () => {
     getEvent,
     getEventTypes,
     getEventsByParticipant,
+    updateEvent,
+    deleteEvent,
   };
 };
 

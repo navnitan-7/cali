@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -31,6 +31,7 @@ export default function EventDetailScreen() {
   const [activeTab, setActiveTab] = useState('Participants');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
   const event = tournamentId && eventId ? getEvent(tournamentId, eventId) : undefined;
@@ -723,11 +724,22 @@ export default function EventDetailScreen() {
           confirmText="Delete"
           cancelText="Cancel"
           variant="danger"
-          onConfirm={() => {
+          loading={isDeleting}
+          onConfirm={async () => {
             if (tournamentId && eventId) {
-              deleteEvent(tournamentId, eventId);
-              setDeleteConfirmVisible(false);
-              router.back();
+              setIsDeleting(true);
+              try {
+                await deleteEvent(tournamentId, eventId);
+                setDeleteConfirmVisible(false);
+                setIsDeleting(false);
+                router.back();
+              } catch (error: any) {
+                console.error('Error deleting event:', error);
+                setIsDeleting(false);
+                setDeleteConfirmVisible(false);
+                const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete event. Please try again.';
+                Alert.alert('Cannot Delete Event', errorMessage);
+              }
             }
           }}
           onCancel={() => {

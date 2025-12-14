@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from utils.db import db
 from utils.variables import Event
 from app.auth.auth import get_current_user
@@ -54,6 +54,21 @@ async def update_event(id: int, event: Event, current_user: dict = Depends(get_c
 
 @router.delete("/delete/{id}")
 async def delete_event(id: int, current_user: dict = Depends(get_current_user)):
+    # Check if event has any participants associated with it
+    participants = db.read("""
+        SELECT COUNT(*) as count
+        FROM cali_db.participants_events
+        WHERE event_id = :id
+    """, {"id": id})
+    
+    participant_count = participants[0]["count"] if participants else 0
+    
+    if participant_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete event: {participant_count} participant(s) are associated with this event. Please remove all participants before deleting."
+        )
+    
     return db.execute_action("""
         DELETE FROM cali_db.events WHERE id = :id
     """, {"id": id})
