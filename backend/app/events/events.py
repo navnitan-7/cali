@@ -51,3 +51,9 @@ async def update_event(id: int, event: Event, current_user: dict = Depends(get_c
     return db.execute_action("""
         UPDATE cali_db.events SET name = :name, description = :description, event_type = :event_type WHERE id = :id
     """, {"id": id, "name": event.name, "description": event.description, "event_type": event.event_type})
+
+@router.delete("/delete/{id}")
+async def delete_event(id: int, current_user: dict = Depends(get_current_user)):
+    return db.execute_action("""
+        DELETE FROM cali_db.events WHERE id = :id
+    """, {"id": id})
