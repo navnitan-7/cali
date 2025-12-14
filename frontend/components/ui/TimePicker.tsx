@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput } from 'react-native';
 import { useColors } from '../../utils/colors';
 import { getFontFamily } from '../../utils/fonts';
@@ -62,68 +62,135 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
   };
 
   const { minutes, seconds, milliseconds, microseconds } = parseTime(value);
-  const [localMinutes, setLocalMinutes] = useState(minutes);
-  const [localSeconds, setLocalSeconds] = useState(seconds);
-  const [localMilliseconds, setLocalMilliseconds] = useState(milliseconds);
-  const [localMicroseconds, setLocalMicroseconds] = useState(microseconds);
+  const [localMinutes, setLocalMinutes] = useState<string>(minutes === 0 ? '' : minutes.toString());
+  const [localSeconds, setLocalSeconds] = useState<string>(seconds === 0 ? '' : seconds.toString());
+  const [localMilliseconds, setLocalMilliseconds] = useState<string>(milliseconds === 0 ? '' : milliseconds.toString());
+  const [localMicroseconds, setLocalMicroseconds] = useState<string>(microseconds === 0 ? '' : microseconds.toString());
 
-  // Sync local state with value prop
+  // Track if component is being actively edited to avoid overwriting blanks (use ref for synchronous check)
+  const isEditingRef = useRef<boolean>(false);
+  const lastFormattedValueRef = useRef<string>(value);
+  
+  // Sync local state with value prop (but not when user is actively editing)
   useEffect(() => {
-    const parsed = parseTime(value);
-    setLocalMinutes(parsed.minutes);
-    setLocalSeconds(parsed.seconds);
-    setLocalMilliseconds(parsed.milliseconds);
-    setLocalMicroseconds(parsed.microseconds);
+    // Only sync if value changed from outside (not from our own onChange)
+    if (!isEditingRef.current && value !== lastFormattedValueRef.current) {
+      const parsed = parseTime(value);
+      // Show values as blank if they're 0, otherwise show the number
+      setLocalMinutes(parsed.minutes === 0 ? '' : parsed.minutes.toString());
+      setLocalSeconds(parsed.seconds === 0 ? '' : parsed.seconds.toString());
+      setLocalMilliseconds(parsed.milliseconds === 0 ? '' : parsed.milliseconds.toString());
+      setLocalMicroseconds(parsed.microseconds === 0 ? '' : parsed.microseconds.toString());
+      lastFormattedValueRef.current = value;
+    }
   }, [value]);
 
-  // Handle individual field changes
+  // Validation functions
+  const isValidMinutes = (text: string): boolean => {
+    if (text === '') return true;
+    const num = parseInt(text);
+    return !isNaN(num) && num >= 0;
+  };
+
+  const isValidSeconds = (text: string): boolean => {
+    if (text === '') return true;
+    const num = parseInt(text);
+    return !isNaN(num) && num >= 0 && num <= 59;
+  };
+
+  const isValidMilliseconds = (text: string): boolean => {
+    if (text === '') return true;
+    const num = parseInt(text);
+    return !isNaN(num) && num >= 0 && num <= 999;
+  };
+
+  const isValidMicroseconds = (text: string): boolean => {
+    if (text === '') return true;
+    const num = parseInt(text);
+    return !isNaN(num) && num >= 0 && num <= 999;
+  };
+
+  // Helper to get numeric value or 0 if blank
+  const getNumericValue = (text: string): number => {
+    if (text === '') return 0;
+    const num = parseInt(text);
+    return isNaN(num) ? 0 : num;
+  };
+
+  // Handle individual field changes - allow free input and preserve blanks
   const handleMinutesChange = (text: string) => {
-    // Allow empty string for better UX
-    if (text === '') {
-      setLocalMinutes(0);
-      onChange(formatTime(0, localSeconds, localMilliseconds, localMicroseconds));
+    // Allow only digits and empty string
+    if (text !== '' && !/^\d+$/.test(text)) {
       return;
     }
-    const num = Math.max(0, Math.min(999, parseInt(text) || 0));
-    setLocalMinutes(num);
-    const formatted = formatTime(num, localSeconds, localMilliseconds, localMicroseconds);
+    isEditingRef.current = true;
+    setLocalMinutes(text);
+    // Format with blanks treated as 0 for onChange, but preserve blank in display
+    const m = getNumericValue(text);
+    const s = getNumericValue(localSeconds);
+    const ms = getNumericValue(localMilliseconds);
+    const us = getNumericValue(localMicroseconds);
+    const formatted = formatTime(m, s, ms, us);
+    lastFormattedValueRef.current = formatted;
     onChange(formatted);
   };
 
   const handleSecondsChange = (text: string) => {
-    if (text === '') {
-      setLocalSeconds(0);
-      onChange(formatTime(localMinutes, 0, localMilliseconds, localMicroseconds));
+    // Allow only digits and empty string
+    if (text !== '' && !/^\d+$/.test(text)) {
       return;
     }
-    const num = Math.max(0, Math.min(59, parseInt(text) || 0));
-    setLocalSeconds(num);
-    const formatted = formatTime(localMinutes, num, localMilliseconds, localMicroseconds);
+    isEditingRef.current = true;
+    setLocalSeconds(text);
+    const m = getNumericValue(localMinutes);
+    const s = getNumericValue(text);
+    const ms = getNumericValue(localMilliseconds);
+    const us = getNumericValue(localMicroseconds);
+    const formatted = formatTime(m, s, ms, us);
+    lastFormattedValueRef.current = formatted;
     onChange(formatted);
   };
 
   const handleMillisecondsChange = (text: string) => {
-    if (text === '') {
-      setLocalMilliseconds(0);
-      onChange(formatTime(localMinutes, localSeconds, 0, localMicroseconds));
+    // Allow only digits and empty string
+    if (text !== '' && !/^\d+$/.test(text)) {
       return;
     }
-    const num = Math.max(0, Math.min(999, parseInt(text) || 0));
-    setLocalMilliseconds(num);
-    const formatted = formatTime(localMinutes, localSeconds, num, localMicroseconds);
+    isEditingRef.current = true;
+    setLocalMilliseconds(text);
+    const m = getNumericValue(localMinutes);
+    const s = getNumericValue(localSeconds);
+    const ms = getNumericValue(text);
+    const us = getNumericValue(localMicroseconds);
+    const formatted = formatTime(m, s, ms, us);
+    lastFormattedValueRef.current = formatted;
     onChange(formatted);
   };
 
   const handleMicrosecondsChange = (text: string) => {
-    if (text === '') {
-      setLocalMicroseconds(0);
-      onChange(formatTime(localMinutes, localSeconds, localMilliseconds, 0));
+    // Allow only digits and empty string
+    if (text !== '' && !/^\d+$/.test(text)) {
       return;
     }
-    const num = Math.max(0, Math.min(999, parseInt(text) || 0));
-    setLocalMicroseconds(num);
-    const formatted = formatTime(localMinutes, localSeconds, localMilliseconds, num);
+    isEditingRef.current = true;
+    setLocalMicroseconds(text);
+    const m = getNumericValue(localMinutes);
+    const s = getNumericValue(localSeconds);
+    const ms = getNumericValue(localMilliseconds);
+    const us = getNumericValue(text);
+    const formatted = formatTime(m, s, ms, us);
+    lastFormattedValueRef.current = formatted;
     onChange(formatted);
+  };
+
+  // Handle focus to set editing state
+  const handleFocus = () => {
+    isEditingRef.current = true;
+  };
+
+  // Handle blur to reset editing state
+  const handleBlur = () => {
+    isEditingRef.current = false;
   };
 
   // Text input version for all platforms
@@ -147,15 +214,18 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
             Minutes
           </Text>
           <TextInput
-            value={localMinutes.toString()}
+            value={localMinutes}
             onChangeText={handleMinutesChange}
-            placeholder="0"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder=""
             placeholderTextColor={colors['text-secondary']}
             keyboardType="numeric"
-            maxLength={3}
             style={{
               borderWidth: 1,
-              borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+              borderColor: !isValidMinutes(localMinutes) 
+                ? colors['border-danger'] 
+                : (accentColor ? accentColor + '40' : colors['border-default']),
               borderRadius: 8,
               padding: 12,
               color: colors['text-primary'],
@@ -166,14 +236,16 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
               width: '100%',
             }}
           />
-          <Text style={{
-            fontSize: 10,
-            fontFamily: getFontFamily('regular'),
-            color: colors['text-muted'],
-            marginTop: 4,
-          }}>
-            0-999
-          </Text>
+          {!isValidMinutes(localMinutes) && (
+            <Text style={{
+              fontSize: 10,
+              fontFamily: getFontFamily('regular'),
+              color: colors['text-danger'],
+              marginTop: 4,
+            }}>
+              Invalid
+            </Text>
+          )}
         </View>
 
         {/* Separator */}
@@ -199,15 +271,18 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
             Seconds
           </Text>
           <TextInput
-            value={localSeconds.toString()}
+            value={localSeconds}
             onChangeText={handleSecondsChange}
-            placeholder="0"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder=""
             placeholderTextColor={colors['text-secondary']}
             keyboardType="numeric"
-            maxLength={2}
             style={{
               borderWidth: 1,
-              borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+              borderColor: !isValidSeconds(localSeconds) 
+                ? colors['border-danger'] 
+                : (accentColor ? accentColor + '40' : colors['border-default']),
               borderRadius: 8,
               padding: 12,
               color: colors['text-primary'],
@@ -218,14 +293,16 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
               width: '100%',
             }}
           />
-          <Text style={{
-            fontSize: 10,
-            fontFamily: getFontFamily('regular'),
-            color: colors['text-muted'],
-            marginTop: 4,
-          }}>
-            0-59
-          </Text>
+          {!isValidSeconds(localSeconds) && (
+            <Text style={{
+              fontSize: 10,
+              fontFamily: getFontFamily('regular'),
+              color: colors['text-danger'],
+              marginTop: 4,
+            }}>
+              Invalid (0-59)
+            </Text>
+          )}
         </View>
 
         {/* Separator */}
@@ -251,15 +328,18 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
             MS
           </Text>
           <TextInput
-            value={localMilliseconds.toString()}
+            value={localMilliseconds}
             onChangeText={handleMillisecondsChange}
-            placeholder="0"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            placeholder=""
             placeholderTextColor={colors['text-secondary']}
             keyboardType="numeric"
-            maxLength={3}
             style={{
               borderWidth: 1,
-              borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+              borderColor: !isValidMilliseconds(localMilliseconds) 
+                ? colors['border-danger'] 
+                : (accentColor ? accentColor + '40' : colors['border-default']),
               borderRadius: 8,
               padding: 12,
               color: colors['text-primary'],
@@ -270,14 +350,16 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
               width: '100%',
             }}
           />
-          <Text style={{
-            fontSize: 10,
-            fontFamily: getFontFamily('regular'),
-            color: colors['text-muted'],
-            marginTop: 4,
-          }}>
-            0-999
-          </Text>
+          {!isValidMilliseconds(localMilliseconds) && (
+            <Text style={{
+              fontSize: 10,
+              fontFamily: getFontFamily('regular'),
+              color: colors['text-danger'],
+              marginTop: 4,
+            }}>
+              Invalid (0-999)
+            </Text>
+          )}
         </View>
 
         {useMicroseconds && (
@@ -305,15 +387,18 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
                 US
               </Text>
               <TextInput
-                value={localMicroseconds.toString()}
+                value={localMicroseconds}
                 onChangeText={handleMicrosecondsChange}
-                placeholder="0"
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                placeholder=""
                 placeholderTextColor={colors['text-secondary']}
                 keyboardType="numeric"
-                maxLength={3}
                 style={{
                   borderWidth: 1,
-                  borderColor: accentColor ? accentColor + '40' : colors['border-default'],
+                  borderColor: !isValidMicroseconds(localMicroseconds) 
+                    ? colors['border-danger'] 
+                    : (accentColor ? accentColor + '40' : colors['border-default']),
                   borderRadius: 8,
                   padding: 12,
                   color: colors['text-primary'],
@@ -324,14 +409,16 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
                   width: '100%',
                 }}
               />
-              <Text style={{
-                fontSize: 10,
-                fontFamily: getFontFamily('regular'),
-                color: colors['text-muted'],
-                marginTop: 4,
-              }}>
-                0-999
-              </Text>
+              {!isValidMicroseconds(localMicroseconds) && (
+                <Text style={{
+                  fontSize: 10,
+                  fontFamily: getFontFamily('regular'),
+                  color: colors['text-danger'],
+                  marginTop: 4,
+                }}>
+                  Invalid (0-999)
+                </Text>
+              )}
             </View>
           </>
         )}

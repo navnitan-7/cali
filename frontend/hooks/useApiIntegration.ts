@@ -256,11 +256,27 @@ export const useActivityApi = () => {
     }
   }, []);
 
+  const updateActivity = useCallback(async (data: AddActivityData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await activityService.updateActivity(data);
+      return result;
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || 'Failed to update activity';
+      setError(errorMsg);
+      throw new Error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
     getMetrics,
     addActivity,
+    updateActivity,
   };
 };
 

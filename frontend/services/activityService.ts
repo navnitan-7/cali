@@ -36,6 +36,11 @@ class ActivityService {
     const response = await apiClient.post('/activity/add_activity/', data);
     return response.data;
   }
+
+  async updateActivity(data: AddActivityData): Promise<{ message: string }> {
+    const response = await apiClient.put('/activity/update_activity/', data);
+    return response.data;
+  }
 }
 
 export const activityService = new ActivityService();

@@ -8,7 +8,7 @@ import { useTheme } from '@/stores/themeStore';
 import { useColors } from '@/utils/colors';
 import { getFontFamily } from '@/utils/fonts';
 import { useTournamentStore, EventParticipantData } from '@/stores/tournamentStore';
-import { activityService, AddActivityData } from '@/services/activityService';
+import { activityService, AddActivityData, ActivityMetric } from '@/services/activityService';
 import { useActivityApi } from '@/hooks/useApiIntegration';
 import { useEventTypesStore } from '@/stores/eventTypesStore';
 import { ACTIVITY_FIELDS_BY_EVENT, MAX_ATTEMPTS_PER_EVENT, FIELD_LABELS, FIELD_ICONS } from '@/constants/activityFields';
@@ -35,9 +35,11 @@ export default function EventParticipantDetailScreen() {
   const [showAddActivityModal, setShowAddActivityModal] = useState(false);
   const [hasSyncedActivity, setHasSyncedActivity] = useState(false);
   const [editingAttemptId, setEditingAttemptId] = useState<string | null>(null);
+  const [metricsData, setMetricsData] = useState<ActivityMetric[]>([]);
+  const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   
   const { eventTypes } = useEventTypesStore();
-  const { addActivity } = useActivityApi();
+  const { addActivity, updateActivity, getMetrics } = useActivityApi();
 
   const {
     getTournament,
@@ -89,6 +91,25 @@ export default function EventParticipantDetailScreen() {
     }
   }, [activeTab, eventId, participantId, tournamentId]);
 
+  // Fetch metrics when Metrics tab is opened
+  useEffect(() => {
+    if (activeTab === 'Metrics' && eventId && participantId && eventTypeId) {
+      const fetchMetrics = async () => {
+        try {
+          setIsLoadingMetrics(true);
+          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId));
+          setMetricsData(metrics || []);
+        } catch (error) {
+          console.error('Error fetching metrics:', error);
+          setMetricsData([]);
+        } finally {
+          setIsLoadingMetrics(false);
+        }
+      };
+      fetchMetrics();
+    }
+  }, [activeTab, eventId, participantId, eventTypeId, getMetrics]);
+
   // Calculate next attempt_id based on existing attempts
   const getNextAttemptId = useMemo(() => {
     if (!eventTypeId) return 1;
@@ -120,24 +141,40 @@ export default function EventParticipantDetailScreen() {
       if (editingAttemptId) {
         // Pre-fill form with existing attempt data when editing
         const attemptToEdit = eventData?.attempts?.find(a => a.id === editingAttemptId);
-          if (attemptToEdit && attemptToEdit.data) {
+        
+        if (attemptToEdit && attemptToEdit.data) {
+          // First, try to get data from metricsData (more recent/complete) if editing from Metrics tab
+          let metricFromApi: ActivityMetric | undefined;
+          if (showMetricsModal && attemptToEdit.data.attempt_id !== undefined) {
+            metricFromApi = metricsData.find(m => m.attempt_id === attemptToEdit.data.attempt_id);
+          }
+          
+          // Use API data if available, otherwise use eventData
+          const sourceData = metricFromApi || attemptToEdit.data;
+          
           const editData: Record<string, any> = {
-            is_success: attemptToEdit.data.is_success !== undefined ? attemptToEdit.data.is_success : true,
+            is_success: sourceData.is_success !== undefined ? sourceData.is_success : true,
           };
           
-          if (attemptToEdit.data.attempt_id !== undefined) {
-            editData.attempt_id = attemptToEdit.data.attempt_id;
+          if (sourceData.attempt_id !== undefined) {
+            editData.attempt_id = sourceData.attempt_id;
           }
-          if (attemptToEdit.data.time !== undefined) {
+          
+          if (sourceData.time !== undefined) {
             // Convert time from seconds (number) to time string format if needed
-            if (typeof attemptToEdit.data.time === 'number') {
-              editData.time = secondsToTimeString(attemptToEdit.data.time);
-            } else if (typeof attemptToEdit.data.time === 'string') {
-              editData.time = attemptToEdit.data.time;
+            if (typeof sourceData.time === 'number') {
+              editData.time = secondsToTimeString(sourceData.time);
+            } else if (typeof sourceData.time === 'string') {
+              editData.time = sourceData.time;
             }
           }
-          if (attemptToEdit.data.weight !== undefined) {
-            editData.weight = attemptToEdit.data.weight;
+          
+          if (sourceData.weight !== undefined) {
+            editData.weight = sourceData.weight;
+          }
+          
+          if (sourceData.type_of_activity !== undefined) {
+            editData.type_of_activity = sourceData.type_of_activity;
           }
           
           setFormValues(editData);
@@ -151,7 +188,7 @@ export default function EventParticipantDetailScreen() {
         setFormValues(initialValues);
       }
     }
-  }, [showMetricsModal, showAddActivityModal, editingAttemptId, eventData?.attempts, getNextAttemptId]);
+  }, [showMetricsModal, showAddActivityModal, editingAttemptId, eventData?.attempts, metricsData, getNextAttemptId]);
 
   // Get tournament accent color
   const accent = useMemo(() => {
@@ -254,8 +291,12 @@ export default function EventParticipantDetailScreen() {
         is_deleted: false,
       };
 
-      // Add activity to backend
-      await addActivity(activityData);
+      // Use updateActivity if editing existing data, otherwise use addActivity
+      if (editingAttemptId) {
+        await updateActivity(activityData);
+      } else {
+        await addActivity(activityData);
+      }
 
       // Update local state
       const updateData: Record<string, any> = {};
@@ -298,7 +339,7 @@ export default function EventParticipantDetailScreen() {
       // Refresh activity list
       setHasSyncedActivity(false);
       
-      Alert.alert('Success', 'Activity added successfully');
+      Alert.alert('Success', editingAttemptId ? 'Activity updated successfully' : 'Activity added successfully');
     } catch (error: any) {
       console.error('Error saving activity:', error);
       setIsSubmitting(false);
@@ -390,11 +431,11 @@ export default function EventParticipantDetailScreen() {
 
         {field === 'time' ? (
           <TimePicker
-            value={formValues[field] || '00:00:000:000'}
+            value={formValues[field] || '00:00:000'}
             onChange={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
             isDark={isDark}
             accentColor={accent?.primary}
-            precision="microseconds"
+            precision="milliseconds"
           />
         ) : field === 'weight' ? (
           <TextInput
@@ -476,11 +517,11 @@ export default function EventParticipantDetailScreen() {
           />
         ) : field === 'time' ? (
           <TimePicker
-            value={formValues[field] || '00:00:000:000'}
+            value={formValues[field] || '00:00:000'}
             onChange={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
             isDark={isDark}
             accentColor={accent?.primary}
-            precision="microseconds"
+            precision="milliseconds"
           />
         ) : field === 'weight' ? (
           <TextInput
@@ -842,6 +883,56 @@ export default function EventParticipantDetailScreen() {
     );
   });
 
+  // Helper to format time from seconds to readable format
+  const formatTime = (seconds?: number): string => {
+    if (seconds === undefined || seconds === null) return '';
+    const totalSeconds = Math.floor(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    const decimalPart = seconds - totalSeconds;
+    const milliseconds = Math.floor(decimalPart * 1000);
+    const microseconds = Math.floor((decimalPart * 1000 - milliseconds) * 1000);
+    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${milliseconds.toString().padStart(3, '0')}:${microseconds.toString().padStart(3, '0')}`;
+  };
+
+  // Get table columns (attempt_id + required fields excluding attempt_id)
+  const tableColumns = useMemo(() => {
+    if (!requiredFields.length) return [];
+    // attempt_id is always first, then other required fields
+    return requiredFields;
+  }, [requiredFields]);
+
+  // Get table rows based on MAX_ATTEMPTS_PER_EVENT
+  const tableRows = useMemo(() => {
+    if (!eventTypeId) return [];
+    const maxAttempts = MAX_ATTEMPTS_PER_EVENT[eventTypeId] || 1;
+    const rows: Array<Record<string, any>> = [];
+    
+    // Create rows for each attempt
+    for (let attemptId = 1; attemptId <= maxAttempts; attemptId++) {
+      // Find existing data for this attempt_id
+      const existingData = metricsData.find(m => m.attempt_id === attemptId);
+      
+      const row: Record<string, any> = {
+        attempt_id: attemptId,
+      };
+      
+      // Populate row with existing data or empty values
+      requiredFields.forEach(field => {
+        if (field === 'attempt_id') return; // Skip attempt_id as it's already set
+        if (existingData && existingData[field as keyof ActivityMetric] !== undefined) {
+          row[field] = existingData[field as keyof ActivityMetric];
+        } else {
+          row[field] = null; // Empty value
+        }
+      });
+      
+      rows.push(row);
+    }
+    
+    return rows;
+  }, [eventTypeId, metricsData, requiredFields]);
+
   // Render Metrics Tab
   const renderMetricsTab = () => {
     if (!eventTypeId || metricsFields.length === 0) {
@@ -870,91 +961,175 @@ export default function EventParticipantDetailScreen() {
           borderColor: colors['border-default'],
           backgroundColor: colors['bg-card'],
         }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="stats-chart" size={20} color={accent ? accent.primary : colors['bg-primary']} />
-              <Text style={{
-                fontSize: 16,
-                fontFamily: getFontFamily('semibold'),
-                color: colors['text-primary'],
-                marginLeft: 8,
-              }}>
-                Metrics
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => {
-                requestAnimationFrame(() => {
-                  setEditingAttemptId(null);
-                  setShowMetricsModal(true);
-                });
-              }}
-              activeOpacity={0.7}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 8,
-                backgroundColor: accent ? accent.primary : colors['bg-primary'],
-              }}
-            >
-              <Ionicons name="add" size={16} color={isDark ? '#000' : '#FFF'} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+            <Ionicons name="stats-chart" size={20} color={accent ? accent.primary : colors['bg-primary']} />
+            <Text style={{
+              fontSize: 16,
+              fontFamily: getFontFamily('semibold'),
+              color: colors['text-primary'],
+              marginLeft: 8,
+            }}>
+              Metrics
+            </Text>
+          </View>
+
+          {/* Metrics Table */}
+          {isLoadingMetrics ? (
+            <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+              <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
               <Text style={{
                 fontSize: 14,
                 fontFamily: getFontFamily('medium'),
-                color: isDark ? '#000' : '#FFF',
-                marginLeft: 6,
+                color: colors['text-secondary'],
+                marginTop: 12,
               }}>
-                Add Metric
+                Loading metrics...
               </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Current Metrics Display */}
-          <View style={{
-            borderWidth: 1,
-            borderColor: colors['border-default'],
-            borderRadius: 8,
-            padding: 12,
-              backgroundColor: colors['bg-secondary'],
-            }}>
-            {eventData?.time && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                <Ionicons name="time-outline" size={16} color={colors['text-secondary']} style={{ marginRight: 8 }} />
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-primary'],
-                }}>
-                  Time: <Text style={{ fontFamily: getFontFamily('regular'), color: colors['text-secondary'] }}>{eventData.time}</Text>
-                </Text>
-              </View>
-            )}
-            {eventData?.weight !== undefined && (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="barbell-outline" size={16} color={colors['text-secondary']} style={{ marginRight: 8 }} />
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-primary'],
-                }}>
-                  Weight: <Text style={{ fontFamily: getFontFamily('regular'), color: colors['text-secondary'] }}>{eventData.weight} kg</Text>
-                </Text>
-              </View>
-            )}
-            {!eventData?.time && !eventData?.weight && (
-                <Text style={{
-                fontSize: 13,
-                fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                fontStyle: 'italic',
-                }}>
-                No metrics recorded yet
-                </Text>
-            )}
-              </View>
             </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{
+                borderWidth: 1,
+                borderColor: colors['border-default'],
+                borderRadius: 8,
+                overflow: 'hidden',
+                backgroundColor: colors['bg-secondary'],
+              }}>
+                {/* Table Header */}
+                <View style={{
+                  flexDirection: 'row',
+                  backgroundColor: isDark 
+                    ? (accent ? accent.primary + '30' : colors['bg-primary']) 
+                    : (accent ? accent.primary + '20' : colors['bg-secondary']),
+                  borderBottomWidth: 2,
+                  borderBottomColor: accent ? accent.primary : colors['border-default'],
+                }}>
+                  {tableColumns.map((column, index) => (
+                    <View
+                      key={column}
+                      style={{
+                        paddingVertical: 12,
+                        paddingHorizontal: 12,
+                        borderRightWidth: index < tableColumns.length - 1 ? 1 : 0,
+                        borderRightColor: colors['border-default'],
+                        minWidth: 100,
+                      }}
+                    >
+                      <Text style={{
+                        fontSize: 13,
+                        fontFamily: getFontFamily('semibold'),
+                        color: isDark 
+                          ? (accent ? accent.primary : colors['text-primary'])
+                          : (accent ? accent.primary : colors['text-primary']),
+                        textTransform: 'capitalize',
+                      }}>
+                        {FIELD_LABELS[column] || column}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Table Rows */}
+                {tableRows.map((row, rowIndex) => {
+                  // Check if this row has existing data
+                  const hasData = metricsData.some(m => m.attempt_id === row.attempt_id);
+                  const existingMetric = metricsData.find(m => m.attempt_id === row.attempt_id);
+                  
+                  return (
+                  <TouchableOpacity
+                    key={row.attempt_id}
+                    onPress={() => {
+                      if (hasData && existingMetric) {
+                        // Find the attempt in eventData to get the attempt ID for editing
+                        const existingAttempt = eventData?.attempts?.find(
+                          a => a.type === 'metric' && a.data.attempt_id === row.attempt_id
+                        );
+                        if (existingAttempt) {
+                          // Set editingAttemptId - the useEffect will populate form from metricsData
+                          setEditingAttemptId(existingAttempt.id);
+                        } else {
+                          // Data exists in backend but not in local state - create new form with data from metricsData
+                          setEditingAttemptId(null);
+                          const formData: Record<string, any> = {
+                            attempt_id: row.attempt_id,
+                            is_success: existingMetric.is_success !== undefined ? existingMetric.is_success : true,
+                          };
+                          if (existingMetric.time !== undefined) {
+                            formData.time = formatTime(existingMetric.time);
+                          }
+                          if (existingMetric.weight !== undefined) {
+                            formData.weight = existingMetric.weight;
+                          }
+                          if (existingMetric.type_of_activity) {
+                            formData.type_of_activity = existingMetric.type_of_activity;
+                          }
+                          setFormValues(formData);
+                        }
+                      } else {
+                        // New attempt - pre-fill attempt_id
+                        setEditingAttemptId(null);
+                        setFormValues({ attempt_id: row.attempt_id });
+                      }
+                      setShowMetricsModal(true);
+                    }}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row',
+                      borderBottomWidth: rowIndex < tableRows.length - 1 ? 1 : 0,
+                      borderBottomColor: colors['border-default'],
+                      backgroundColor: rowIndex % 2 === 0 ? colors['bg-secondary'] : colors['bg-card'],
+                    }}
+                  >
+                    {tableColumns.map((column, colIndex) => {
+                      const value = row[column];
+                      const isEmpty = value === null || value === undefined || value === '';
+                      
+                      return (
+                        <View
+                          key={column}
+                          style={{
+                            paddingVertical: 12,
+                            paddingHorizontal: 12,
+                            borderRightWidth: colIndex < tableColumns.length - 1 ? 1 : 0,
+                            borderRightColor: colors['border-default'],
+                            minWidth: 100,
+                            justifyContent: 'center',
+                          }}
+                        >
+                          {isEmpty ? (
+                            <Text style={{
+                              fontSize: 13,
+                              fontFamily: getFontFamily('regular'),
+                              color: colors['text-muted'],
+                              fontStyle: 'italic',
+                            }}>
+                              -
+                            </Text>
+                          ) : (
+                            <Text style={{
+                              fontSize: 13,
+                              fontFamily: getFontFamily('regular'),
+                              color: colors['text-primary'],
+                            }}>
+                              {column === 'time' && typeof value === 'number'
+                                ? formatTime(value)
+                                : column === 'is_success'
+                                ? value ? '✓' : '✗'
+                                : column === 'weight'
+                                ? `${value} kg`
+                                : String(value)}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          )}
+        </View>
       </View>
     );
   };
@@ -1182,7 +1357,13 @@ export default function EventParticipantDetailScreen() {
         is_deleted: false,
       };
 
-      await addActivity(activityData);
+      // Use updateActivity if editing existing data, otherwise use addActivity
+      const isUpdating = !!editingAttemptId;
+      if (isUpdating) {
+        await updateActivity(activityData);
+      } else {
+        await addActivity(activityData);
+      }
 
       // Update local state
       const updateData: Record<string, any> = {};
@@ -1206,7 +1387,18 @@ export default function EventParticipantDetailScreen() {
       setFormValues({});
       setIsSubmitting(false);
       setShowMetricsModal(false);
-      Alert.alert('Success', editingAttemptId ? 'Metric updated successfully' : 'Metric added successfully');
+      
+      // Refresh metrics data after update or add to ensure UI is in sync
+      if (eventId && participantId) {
+        try {
+          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId));
+          setMetricsData(metrics || []);
+        } catch (error) {
+          console.error('Error refreshing metrics:', error);
+        }
+      }
+      
+      Alert.alert('Success', isUpdating ? 'Metric updated successfully' : 'Metric added successfully');
     } catch (error: any) {
       console.error('Error saving metric:', error);
       setIsSubmitting(false);
