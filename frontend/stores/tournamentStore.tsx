@@ -6,8 +6,13 @@ import { eventService, participantService } from '../services';
 interface Participant {
   id: string;
   name: string;
+  age?: number;
+  gender?: string;
   weight?: number;
-  division?: string;
+  phone?: string;
+  country?: string;
+  state?: string;
+  division?: string; // Legacy field, maps to gender
   createdAt: string;
   updatedAt: string;
 }
@@ -89,8 +94,8 @@ interface TournamentStore {
   getTournament: (id: string) => Tournament | undefined;
   
   // Participant management
-  addParticipant: (tournamentId: string, participant: Omit<Participant, 'id' | 'createdAt' | 'updatedAt'>, eventIds?: string[]) => Promise<string>;
-  updateParticipant: (tournamentId: string, participantId: string, updates: Partial<Participant>) => Promise<void>;
+  addParticipant: (tournamentId: string, participant: Omit<Participant, 'id' | 'createdAt' | 'updatedAt' | 'division'>, eventIds?: string[]) => Promise<string>;
+  updateParticipant: (tournamentId: string, participantId: string, updates: Partial<Omit<Participant, 'id' | 'createdAt' | 'updatedAt' | 'division'>> & { eventIds?: string[] }) => Promise<void>;
   deleteParticipant: (tournamentId: string, participantId: string) => void;
   getParticipant: (tournamentId: string, participantId: string) => Participant | undefined;
   
@@ -422,8 +427,13 @@ export const useTournamentStore = create<TournamentStore>()(
               participantMap.set(id, {
                 id,
                 name: bp.name,
+                age: bp.age,
+                gender: bp.gender,
                 weight: bp.weight,
-                division: bp.gender || 'Open',
+                phone: bp.phone,
+                country: bp.country,
+                state: bp.state,
+                division: bp.gender || 'Open', // Legacy field
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               });
@@ -605,12 +615,12 @@ export const useTournamentStore = create<TournamentStore>()(
           // Call backend API to create participant
           const result = await participantService.createParticipant({
             name: participant.name,
-            age: 0, // Default - update if you have age field
-            gender: participant.division || 'Open',
+            age: participant.age || 0,
+            gender: participant.gender || participant.division || 'Open',
             weight: participant.weight || 0,
-            phone: '', // Add if needed
-            country: '', // Add if needed
-            state: '', // Add if needed
+            phone: participant.phone || '',
+            country: participant.country || '',
+            state: participant.state || '',
             event_id: selectedEventIds,
           });
 
@@ -656,18 +666,22 @@ export const useTournamentStore = create<TournamentStore>()(
             throw new Error('Participant not found');
           }
 
-          // Get all events for this tournament to get their IDs
-          const eventIds = tournament?.events.map(e => parseInt(e.id)).filter(id => !isNaN(id)) || [];
+          // Prepare event_ids if provided in updates
+          let eventIds: number[] | undefined = undefined;
+          if (updates.eventIds !== undefined) {
+            eventIds = updates.eventIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+          }
 
           // Call backend API to update participant
           await participantService.updateParticipant(parseInt(participantId), {
             name: updates.name || currentParticipant.name,
-            age: 0, // Default - update if you have age field
-            gender: updates.division || currentParticipant.division || 'Open',
+            age: updates.age !== undefined ? updates.age : (currentParticipant.age || 0),
+            gender: updates.gender || updates.division || currentParticipant.gender || currentParticipant.division || 'Open',
             weight: updates.weight !== undefined ? (updates.weight || 0) : (currentParticipant.weight || 0),
-            phone: '', // Add if needed
-            country: '', // Add if needed
-            state: '', // Add if needed
+            phone: updates.phone !== undefined ? updates.phone : (currentParticipant.phone || ''),
+            country: updates.country !== undefined ? updates.country : (currentParticipant.country || ''),
+            state: updates.state !== undefined ? updates.state : (currentParticipant.state || ''),
+            event_id: eventIds,
           });
 
           // Update local state

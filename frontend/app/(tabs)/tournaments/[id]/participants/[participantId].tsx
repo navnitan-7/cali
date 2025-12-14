@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, TextInput, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -7,9 +7,10 @@ import { useTheme } from '../../../../../stores/themeStore';
 import { useColors } from '../../../../../utils/colors';
 import { getFontFamily } from '../../../../../utils/fonts';
 import { useTournamentStore } from '../../../../../stores/tournamentStore';
+import { eventService } from '../../../../../services';
+import { divisionOptions } from '../../../../../schemas/eventModal';
 import Button from '../../../../../components/ui/Button';
 import ConfirmDialog from '../../../../../components/ui/ConfirmDialog';
-import { divisionOptions } from '../../../../../schemas/eventModal';
 
 export default function ParticipantDetailScreen() {
   const { id: tournamentId, participantId } = useLocalSearchParams<{ id: string; participantId: string }>();
@@ -18,15 +19,73 @@ export default function ParticipantDetailScreen() {
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
   const { getTournament, getParticipant, updateParticipant, deleteParticipant } = useTournamentStore();
+  const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
   const participant = tournamentId && participantId ? getParticipant(tournamentId, participantId) : undefined;
 
   const [name, setName] = useState(participant?.name || '');
+  const [age, setAge] = useState(participant?.age?.toString() || '');
+  const [gender, setGender] = useState(participant?.gender || participant?.division || '');
   const [weight, setWeight] = useState(participant?.weight?.toString() || '');
-  const [division, setDivision] = useState(participant?.division || '');
+  const [phone, setPhone] = useState(participant?.phone || '');
+  const [country, setCountry] = useState(participant?.country || '');
+  const [state, setState] = useState(participant?.state || '');
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+
+  // Fetch current participant events on mount
+  useEffect(() => {
+    const fetchParticipantEvents = async () => {
+      if (!participantId) return;
+      
+      try {
+        setIsLoadingEvents(true);
+        const events = await eventService.getEventsByParticipant(parseInt(participantId));
+        const eventIds = events.map(e => e.id.toString());
+        setSelectedEvents(eventIds);
+      } catch (error) {
+        console.error('Error fetching participant events:', error);
+      } finally {
+        setIsLoadingEvents(false);
+      }
+    };
+
+    if (participant) {
+      fetchParticipantEvents();
+    }
+  }, [participantId, participant]);
+
+  // Reset form when entering edit mode
+  useEffect(() => {
+    if (isEditMode && participant) {
+      setName(participant.name || '');
+      setAge(participant.age?.toString() || '');
+      setGender(participant.gender || participant.division || '');
+      setWeight(participant.weight?.toString() || '');
+      setPhone(participant.phone || '');
+      setCountry(participant.country || '');
+      setState(participant.state || '');
+      // Fetch events again when entering edit mode
+      const fetchParticipantEvents = async () => {
+        if (!participantId) return;
+        try {
+          setIsLoadingEvents(true);
+          const events = await eventService.getEventsByParticipant(parseInt(participantId));
+          const eventIds = events.map(e => e.id.toString());
+          setSelectedEvents(eventIds);
+        } catch (error) {
+          console.error('Error fetching participant events:', error);
+        } finally {
+          setIsLoadingEvents(false);
+        }
+      };
+      fetchParticipantEvents();
+    }
+  }, [isEditMode, participant, participantId]);
 
   if (!tournament || !participant) {
     return (
@@ -44,14 +103,25 @@ export default function ParticipantDetailScreen() {
       return;
     }
 
+    if (selectedEvents.length === 0) {
+      Alert.alert('Error', 'Please select at least one event');
+      return;
+    }
+
     try {
       setIsSaving(true);
       await updateParticipant(tournamentId!, participantId!, {
-      name: name.trim(),
-      weight: weight ? parseFloat(weight) : undefined,
-      division: division || undefined,
-    });
-    router.back();
+        name: name.trim(),
+        age: age ? parseInt(age) : undefined,
+        gender: gender || undefined,
+        weight: weight ? parseFloat(weight) : undefined,
+        phone: phone.trim() || undefined,
+        country: country.trim() || undefined,
+        state: state.trim() || undefined,
+        eventIds: selectedEvents,
+      });
+      setIsEditMode(false);
+      setIsSaving(false);
     } catch (error) {
       console.error('Error updating participant:', error);
       Alert.alert('Error', 'Failed to update participant. Please try again.');
@@ -59,9 +129,25 @@ export default function ParticipantDetailScreen() {
     }
   };
 
+  const handleCancel = () => {
+    setIsEditMode(false);
+    setName(participant.name || '');
+    setAge(participant.age?.toString() || '');
+    setGender(participant.gender || participant.division || '');
+    setWeight(participant.weight?.toString() || '');
+    setPhone(participant.phone || '');
+    setCountry(participant.country || '');
+    setState(participant.state || '');
+  };
+
   const handleDelete = () => {
     deleteParticipant(tournamentId!, participantId!);
     router.back();
+  };
+
+  const handleEdit = () => {
+    setMenuVisible(false);
+    setIsEditMode(true);
   };
 
   return (
@@ -86,118 +172,665 @@ export default function ParticipantDetailScreen() {
           }}>
             Participant Details
           </Text>
-          <TouchableOpacity onPress={() => setDeleteConfirmVisible(true)}>
-            <Ionicons name="trash-outline" size={24} color={colors['text-danger']} />
-          </TouchableOpacity>
+          {!isEditMode ? (
+            <TouchableOpacity onPress={() => setMenuVisible(true)}>
+              <Ionicons name="ellipsis-horizontal" size={24} color={colors['icon-primary']} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={handleCancel}>
+              <Text style={{
+                fontSize: 16,
+                fontFamily: getFontFamily('medium'),
+                color: colors['text-primary'],
+              }}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 100 }}
         >
-          {/* Name - Required */}
-          <View style={{ marginBottom: 24 }}>
-            <Text style={{
-              fontSize: 14,
-              fontFamily: getFontFamily('medium'),
-              color: colors['text-secondary'],
-              marginBottom: 8,
-            }}>
-              Name <Text style={{ color: colors['text-danger'] }}>*</Text>
-            </Text>
-            <TextInput
-              style={{
-                borderWidth: 1,
-                borderColor: colors['border-default'],
-                borderRadius: 10,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                color: colors['text-primary'],
-                fontFamily: getFontFamily('regular'),
-                backgroundColor: colors['bg-secondary'],
-              }}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter participant name"
-              placeholderTextColor={colors['text-secondary']}
-            />
-          </View>
-
-          {/* Weight */}
-          <View style={{ marginBottom: 24 }}>
-            <Text style={{
-              fontSize: 14,
-              fontFamily: getFontFamily('medium'),
-              color: colors['text-secondary'],
-              marginBottom: 8,
-            }}>
-              Weight (kg)
-            </Text>
-            <TextInput
-              style={{
-                borderWidth: 1,
-                borderColor: colors['border-default'],
-                borderRadius: 10,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                color: colors['text-primary'],
-                fontFamily: getFontFamily('regular'),
-                backgroundColor: colors['bg-secondary'],
-              }}
-              value={weight}
-              onChangeText={setWeight}
-              placeholder="Enter weight in kg"
-              placeholderTextColor={colors['text-secondary']}
-              keyboardType="numeric"
-            />
-          </View>
-
-          {/* Division */}
-          <View style={{ marginBottom: 24 }}>
-            <Text style={{
-              fontSize: 14,
-              fontFamily: getFontFamily('medium'),
-              color: colors['text-secondary'],
-              marginBottom: 8,
-            }}>
-              Division
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {divisionOptions.map((div) => (
-                <TouchableOpacity
-                  key={div}
-                  onPress={() => setDivision(division === div ? '' : div)}
+          {isEditMode ? (
+            <>
+              {/* Name - Required */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Name <Text style={{ color: colors['text-danger'] }}>*</Text>
+                </Text>
+                <TextInput
                   style={{
-                    paddingHorizontal: 16,
+                    borderWidth: 1,
+                    borderColor: colors['border-default'],
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
                     paddingVertical: 10,
-                    borderRadius: 20,
-                    borderWidth: 1.5,
-                    borderColor: division === div ? colors['bg-primary'] : colors['border-default'],
-                    backgroundColor: division === div ? colors['bg-primary'] + '20' : colors['bg-secondary'],
+                    color: colors['text-primary'],
+                    fontFamily: getFontFamily('regular'),
+                    backgroundColor: colors['bg-secondary'],
                   }}
-                >
-                  <Text style={{
-                    fontSize: 14,
-                    fontFamily: getFontFamily('medium'),
-                    color: division === div ? colors['bg-primary'] : colors['text-primary'],
-                  }}>
-                    {div}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter participant name"
+                  placeholderTextColor={colors['text-secondary']}
+                />
+              </View>
 
-          <Button
-            title="Save Changes"
-            onPress={handleSave}
-            variant="primary"
-            fullWidth
-            style={{ marginTop: 12, marginBottom: 20 }}
-            disabled={!name.trim() || isSaving}
-            loading={isSaving}
-          />
+              {/* Age */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Age
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors['border-default'],
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    color: colors['text-primary'],
+                    fontFamily: getFontFamily('regular'),
+                    backgroundColor: colors['bg-secondary'],
+                  }}
+                  value={age}
+                  onChangeText={setAge}
+                  placeholder="Enter age"
+                  placeholderTextColor={colors['text-secondary']}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              {/* Gender */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Gender
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {divisionOptions.map((div) => {
+                    const isSelected = gender === div;
+                    return (
+                      <TouchableOpacity
+                        key={div}
+                        onPress={() => setGender(isSelected ? '' : div)}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 10,
+                          borderRadius: 20,
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? colors['bg-primary'] : colors['border-default'],
+                          backgroundColor: isSelected ? colors['bg-primary'] + '20' : colors['bg-secondary'],
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: 14,
+                          fontFamily: getFontFamily('medium'),
+                          color: isSelected ? colors['bg-primary'] : colors['text-primary'],
+                        }}>
+                          {div}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Weight */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Weight (kg)
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors['border-default'],
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    color: colors['text-primary'],
+                    fontFamily: getFontFamily('regular'),
+                    backgroundColor: colors['bg-secondary'],
+                  }}
+                  value={weight}
+                  onChangeText={setWeight}
+                  placeholder="Enter weight in kg"
+                  placeholderTextColor={colors['text-secondary']}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              {/* Phone */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Phone
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors['border-default'],
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    color: colors['text-primary'],
+                    fontFamily: getFontFamily('regular'),
+                    backgroundColor: colors['bg-secondary'],
+                  }}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="Enter phone number"
+                  placeholderTextColor={colors['text-secondary']}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              {/* Country */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Country
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors['border-default'],
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    color: colors['text-primary'],
+                    fontFamily: getFontFamily('regular'),
+                    backgroundColor: colors['bg-secondary'],
+                  }}
+                  value={country}
+                  onChangeText={setCountry}
+                  placeholder="Enter country"
+                  placeholderTextColor={colors['text-secondary']}
+                />
+              </View>
+
+              {/* State */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  State
+                </Text>
+                <TextInput
+                  style={{
+                    borderWidth: 1,
+                    borderColor: colors['border-default'],
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    color: colors['text-primary'],
+                    fontFamily: getFontFamily('regular'),
+                    backgroundColor: colors['bg-secondary'],
+                  }}
+                  value={state}
+                  onChangeText={setState}
+                  placeholder="Enter state"
+                  placeholderTextColor={colors['text-secondary']}
+                />
+              </View>
+
+              {/* Events - Required */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Events <Text style={{ color: colors['text-danger'] }}>*</Text>
+                </Text>
+                {isLoadingEvents ? (
+                  <View style={{
+                    padding: 16,
+                    borderRadius: 10,
+                    backgroundColor: colors['bg-card'],
+                    borderWidth: 1.5,
+                    borderColor: colors['border-default'],
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: getFontFamily('regular'),
+                      color: colors['text-secondary'],
+                      fontStyle: 'italic',
+                    }}>
+                      Loading events...
+                    </Text>
+                  </View>
+                ) : tournament.events.length === 0 ? (
+                  <View style={{
+                    padding: 16,
+                    borderRadius: 10,
+                    backgroundColor: colors['bg-card'],
+                    borderWidth: 1.5,
+                    borderColor: colors['border-default'],
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: getFontFamily('regular'),
+                      color: colors['text-secondary'],
+                      fontStyle: 'italic',
+                    }}>
+                      No events available. Please create events first.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {tournament.events.map((event) => {
+                      const isSelected = selectedEvents.includes(event.id);
+                      return (
+                        <TouchableOpacity
+                          key={event.id}
+                          onPress={() => {
+                            if (isSelected) {
+                              setSelectedEvents(selectedEvents.filter(id => id !== event.id));
+                            } else {
+                              setSelectedEvents([...selectedEvents, event.id]);
+                            }
+                          }}
+                          style={{
+                            paddingHorizontal: 16,
+                            paddingVertical: 10,
+                            borderRadius: 20,
+                            borderWidth: 1.5,
+                            borderColor: isSelected ? colors['bg-primary'] : colors['border-default'],
+                            backgroundColor: isSelected ? colors['bg-primary'] + '20' : colors['bg-secondary'],
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 14,
+                            fontFamily: getFontFamily('medium'),
+                            color: isSelected ? colors['bg-primary'] : colors['text-primary'],
+                          }}>
+                            {event.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+
+              <Button
+                title="Save Changes"
+                onPress={handleSave}
+                variant="primary"
+                fullWidth
+                style={{ marginTop: 12, marginBottom: 20 }}
+                disabled={!name.trim() || selectedEvents.length === 0 || isSaving}
+                loading={isSaving}
+              />
+            </>
+          ) : (
+            <>
+              {/* Name - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Name
+                </Text>
+                <View style={{
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: colors['bg-secondary'],
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-primary'],
+                  }}>
+                    {participant.name}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Age - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Age
+                </Text>
+                <View style={{
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: colors['bg-secondary'],
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-primary'],
+                  }}>
+                    {participant.age ? `${participant.age} years` : 'Not specified'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Gender - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Gender
+                </Text>
+                <View style={{
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: colors['bg-secondary'],
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-primary'],
+                  }}>
+                    {participant.gender || participant.division || 'Not specified'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Weight - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Weight (kg)
+                </Text>
+                <View style={{
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: colors['bg-secondary'],
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-primary'],
+                  }}>
+                    {participant.weight ? `${participant.weight} kg` : 'Not specified'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Phone - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Phone
+                </Text>
+                <View style={{
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: colors['bg-secondary'],
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-primary'],
+                  }}>
+                    {participant.phone || 'Not specified'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Country - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Country
+                </Text>
+                <View style={{
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: colors['bg-secondary'],
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-primary'],
+                  }}>
+                    {participant.country || 'Not specified'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* State - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  State
+                </Text>
+                <View style={{
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: colors['bg-secondary'],
+                }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontFamily: getFontFamily('regular'),
+                    color: colors['text-primary'],
+                  }}>
+                    {participant.state || 'Not specified'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Events - Read Only */}
+              <View style={{ marginBottom: 24 }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-secondary'],
+                  marginBottom: 8,
+                }}>
+                  Events
+                </Text>
+                {isLoadingEvents ? (
+                  <View style={{
+                    padding: 16,
+                    borderRadius: 10,
+                    backgroundColor: colors['bg-card'],
+                    borderWidth: 1.5,
+                    borderColor: colors['border-default'],
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: getFontFamily('regular'),
+                      color: colors['text-secondary'],
+                      fontStyle: 'italic',
+                    }}>
+                      Loading events...
+                    </Text>
+                  </View>
+                ) : selectedEvents.length === 0 ? (
+                  <View style={{
+                    padding: 16,
+                    borderRadius: 10,
+                    backgroundColor: colors['bg-card'],
+                    borderWidth: 1.5,
+                    borderColor: colors['border-default'],
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: getFontFamily('regular'),
+                      color: colors['text-secondary'],
+                      fontStyle: 'italic',
+                    }}>
+                      No events assigned
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {tournament.events
+                      .filter(event => selectedEvents.includes(event.id))
+                      .map((event) => (
+                        <View
+                          key={event.id}
+                          style={{
+                            paddingHorizontal: 16,
+                            paddingVertical: 10,
+                            borderRadius: 20,
+                            borderWidth: 1.5,
+                            borderColor: colors['border-default'],
+                            backgroundColor: colors['bg-secondary'],
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 14,
+                            fontFamily: getFontFamily('medium'),
+                            color: colors['text-primary'],
+                          }}>
+                            {event.name}
+                          </Text>
+                        </View>
+                      ))}
+                  </View>
+                )}
+              </View>
+            </>
+          )}
         </ScrollView>
+
+        {/* Action Menu Modal */}
+        <Modal
+          visible={menuVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setMenuVisible(false)}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              justifyContent: 'flex-end',
+              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            }}
+            onPress={() => setMenuVisible(false)}
+          >
+            <Pressable
+              style={{
+                backgroundColor: colors['bg-card'],
+                borderTopLeftRadius: 16,
+                borderTopRightRadius: 16,
+                paddingTop: 8,
+                paddingBottom: insets.bottom + 8,
+              }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <TouchableOpacity
+                onPress={handleEdit}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                }}
+              >
+                <Ionicons name="create-outline" size={20} color={colors['text-primary']} />
+                <Text style={{
+                  fontSize: 16,
+                  fontFamily: getFontFamily('regular'),
+                  color: colors['text-primary'],
+                  marginLeft: 12,
+                }}>
+                  Edit Participant
+                </Text>
+              </TouchableOpacity>
+              <View style={{
+                height: 1,
+                backgroundColor: colors['border-default'],
+                marginHorizontal: 16,
+                marginVertical: 4,
+              }} />
+              <TouchableOpacity
+                onPress={() => {
+                  setMenuVisible(false);
+                  setDeleteConfirmVisible(true);
+                }}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                }}
+              >
+                <Ionicons name="trash-outline" size={20} color={colors['text-danger']} />
+                <Text style={{
+                  fontSize: 16,
+                  fontFamily: getFontFamily('regular'),
+                  color: colors['text-danger'],
+                  marginLeft: 12,
+                }}>
+                  Delete Participant
+                </Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         <ConfirmDialog
           visible={deleteConfirmVisible}
@@ -213,4 +846,3 @@ export default function ParticipantDetailScreen() {
     </SafeAreaView>
   );
 }
-

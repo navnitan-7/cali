@@ -8,6 +8,7 @@ import { useColors } from '../../../../../utils/colors';
 import { getFontFamily } from '../../../../../utils/fonts';
 import { useTournamentStore } from '../../../../../stores/tournamentStore';
 import { useTournamentTheme } from '../../../../../hooks/useTournamentTheme';
+import { divisionOptions } from '../../../../../schemas/eventModal';
 import Button from '../../../../../components/ui/Button';
 
 export default function CreateParticipantScreen() {
@@ -22,7 +23,12 @@ export default function CreateParticipantScreen() {
   const { accent, getAccentWithOpacity } = useTournamentTheme(tournament);
 
   const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState('');
   const [weight, setWeight] = useState('');
+  const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState('');
+  const [state, setState] = useState('');
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -52,7 +58,12 @@ export default function CreateParticipantScreen() {
       setIsSaving(true);
       await addParticipant(tournamentId!, {
         name: name.trim(),
-        weight: weight ? parseFloat(weight) : undefined,
+        age: age ? parseInt(age) : 0,
+        gender: gender || 'Open',
+        weight: weight ? parseFloat(weight) : 0,
+        phone: phone.trim(),
+        country: country.trim(),
+        state: state.trim(),
       }, selectedEvents);
       router.back();
     } catch (error) {
@@ -181,6 +192,84 @@ export default function CreateParticipantScreen() {
               />
             </View>
 
+            {/* Age */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
+                marginBottom: 8,
+              }}>
+                Age
+              </Text>
+              <TextInput
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: focusedInput === 'age' && accent
+                    ? accent
+                    : colors['border-default'],
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  color: colors['text-primary'],
+                  fontFamily: getFontFamily('regular'),
+                  fontSize: 16,
+                  backgroundColor: focusedInput === 'age' && accent
+                    ? getAccentWithOpacity(0.05)
+                    : colors['bg-card'],
+                }}
+                value={age}
+                onChangeText={setAge}
+                placeholder="Enter age"
+                placeholderTextColor={colors['text-secondary']}
+                keyboardType="numeric"
+                onFocus={() => setFocusedInput('age')}
+                onBlur={() => setFocusedInput(null)}
+              />
+            </View>
+
+            {/* Gender */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
+                marginBottom: 8,
+              }}>
+                Gender
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                {divisionOptions.map((div) => {
+                  const isSelected = gender === div;
+                  const selectedColor = accent || colors['bg-primary'];
+                  return (
+                    <TouchableOpacity
+                      key={div}
+                      onPress={() => setGender(isSelected ? '' : div)}
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 10,
+                        borderRadius: 20,
+                        borderWidth: 1.5,
+                        borderColor: isSelected ? selectedColor : colors['border-default'],
+                        backgroundColor: isSelected 
+                          ? (accent ? getAccentWithOpacity(0.15) : selectedColor + '20')
+                          : colors['bg-card'],
+                      }}
+                    >
+                      <Text style={{
+                        fontSize: 14,
+                        fontFamily: getFontFamily('medium'),
+                        color: isSelected ? selectedColor : colors['text-primary'],
+                      }}>
+                        {div}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             {/* Weight */}
             <View style={{ marginBottom: 24 }}>
               <Text style={{
@@ -213,6 +302,112 @@ export default function CreateParticipantScreen() {
                 placeholderTextColor={colors['text-secondary']}
                 keyboardType="numeric"
                 onFocus={() => setFocusedInput('weight')}
+                onBlur={() => setFocusedInput(null)}
+              />
+            </View>
+
+            {/* Phone */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
+                marginBottom: 8,
+              }}>
+                Phone
+              </Text>
+              <TextInput
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: focusedInput === 'phone' && accent
+                    ? accent
+                    : colors['border-default'],
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  color: colors['text-primary'],
+                  fontFamily: getFontFamily('regular'),
+                  fontSize: 16,
+                  backgroundColor: focusedInput === 'phone' && accent
+                    ? getAccentWithOpacity(0.05)
+                    : colors['bg-card'],
+                }}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Enter phone number"
+                placeholderTextColor={colors['text-secondary']}
+                keyboardType="phone-pad"
+                onFocus={() => setFocusedInput('phone')}
+                onBlur={() => setFocusedInput(null)}
+              />
+            </View>
+
+            {/* Country */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
+                marginBottom: 8,
+              }}>
+                Country
+              </Text>
+              <TextInput
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: focusedInput === 'country' && accent
+                    ? accent
+                    : colors['border-default'],
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  color: colors['text-primary'],
+                  fontFamily: getFontFamily('regular'),
+                  fontSize: 16,
+                  backgroundColor: focusedInput === 'country' && accent
+                    ? getAccentWithOpacity(0.05)
+                    : colors['bg-card'],
+                }}
+                value={country}
+                onChangeText={setCountry}
+                placeholder="Enter country"
+                placeholderTextColor={colors['text-secondary']}
+                onFocus={() => setFocusedInput('country')}
+                onBlur={() => setFocusedInput(null)}
+              />
+            </View>
+
+            {/* State */}
+            <View style={{ marginBottom: 24 }}>
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
+                marginBottom: 8,
+              }}>
+                State
+              </Text>
+              <TextInput
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: focusedInput === 'state' && accent
+                    ? accent
+                    : colors['border-default'],
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  color: colors['text-primary'],
+                  fontFamily: getFontFamily('regular'),
+                  fontSize: 16,
+                  backgroundColor: focusedInput === 'state' && accent
+                    ? getAccentWithOpacity(0.05)
+                    : colors['bg-card'],
+                }}
+                value={state}
+                onChangeText={setState}
+                placeholder="Enter state"
+                placeholderTextColor={colors['text-secondary']}
+                onFocus={() => setFocusedInput('state')}
                 onBlur={() => setFocusedInput(null)}
               />
             </View>

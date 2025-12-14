@@ -32,6 +32,7 @@ export interface UpdateParticipantData {
   phone: string;
   country: string;
   state: string;
+  event_id?: number[];
 }
 
 class ParticipantService {
