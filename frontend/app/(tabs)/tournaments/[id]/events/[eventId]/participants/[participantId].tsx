@@ -37,6 +37,8 @@ export default function EventParticipantDetailScreen() {
   const [editingAttemptId, setEditingAttemptId] = useState<string | null>(null);
   const [metricsData, setMetricsData] = useState<ActivityMetric[]>([]);
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedMetric, setSelectedMetric] = useState<ActivityMetric | null>(null);
   
   const { eventTypes } = useEventTypesStore();
   const { addActivity, updateActivity, getMetrics } = useActivityApi();
@@ -138,30 +140,65 @@ export default function EventParticipantDetailScreen() {
   // Initialize form values when modals open
   useEffect(() => {
     if (showMetricsModal || showAddActivityModal) {
-      if (editingAttemptId) {
-        // Pre-fill form with existing attempt data when editing
+      // Edit mode: Use selectedMetric if available
+      if (isEditMode && selectedMetric && showMetricsModal) {
+        const formData: Record<string, any> = {
+          attempt_id: selectedMetric.attempt_id,
+          is_success: selectedMetric.is_success !== undefined ? selectedMetric.is_success : true,
+        };
+        
+        // Handle time field - convert from seconds to time string format
+        if (selectedMetric.time !== undefined && selectedMetric.time !== null) {
+          if (typeof selectedMetric.time === 'number') {
+            formData.time = secondsToTimeString(selectedMetric.time);
+          } else if (typeof selectedMetric.time === 'string') {
+            formData.time = selectedMetric.time;
+          }
+        }
+        
+        // Handle weight field
+        if (selectedMetric.weight !== undefined && selectedMetric.weight !== null) {
+          formData.weight = selectedMetric.weight;
+        }
+        
+        // Handle reps field if it exists
+        if ((selectedMetric as any).reps !== undefined && (selectedMetric as any).reps !== null) {
+          formData.reps = (selectedMetric as any).reps;
+        }
+        
+        // Handle type_of_activity field
+        if (selectedMetric.type_of_activity) {
+          formData.type_of_activity = selectedMetric.type_of_activity;
+        }
+        
+        setFormValues(formData);
+      } else if (editingAttemptId) {
+        // Pre-fill form with existing attempt data when editing (legacy support)
         const attemptToEdit = eventData?.attempts?.find(a => a.id === editingAttemptId);
         
-        if (attemptToEdit && attemptToEdit.data) {
-          // First, try to get data from metricsData (more recent/complete) if editing from Metrics tab
-          let metricFromApi: ActivityMetric | undefined;
-          if (showMetricsModal && attemptToEdit.data.attempt_id !== undefined) {
-            metricFromApi = metricsData.find(m => m.attempt_id === attemptToEdit.data.attempt_id);
-          }
-          
-          // Use API data if available, otherwise use eventData
-          const sourceData = metricFromApi || attemptToEdit.data;
-          
+        // Try to get data from metricsData first (more recent/complete)
+        let metricFromApi: ActivityMetric | undefined;
+        if (showMetricsModal && attemptToEdit?.data?.attempt_id !== undefined) {
+          metricFromApi = metricsData.find(m => m.attempt_id === attemptToEdit.data.attempt_id);
+        }
+        
+        // Use API data if available, otherwise use eventData
+        const sourceData = metricFromApi || attemptToEdit?.data;
+        
+        if (sourceData) {
           const editData: Record<string, any> = {
             is_success: sourceData.is_success !== undefined ? sourceData.is_success : true,
           };
           
+          // Always include attempt_id if available
           if (sourceData.attempt_id !== undefined) {
             editData.attempt_id = sourceData.attempt_id;
+          } else if (attemptToEdit?.data?.attempt_id !== undefined) {
+            editData.attempt_id = attemptToEdit.data.attempt_id;
           }
           
+          // Handle time field - convert from seconds to time string format
           if (sourceData.time !== undefined) {
-            // Convert time from seconds (number) to time string format if needed
             if (typeof sourceData.time === 'number') {
               editData.time = secondsToTimeString(sourceData.time);
             } else if (typeof sourceData.time === 'string') {
@@ -169,10 +206,17 @@ export default function EventParticipantDetailScreen() {
             }
           }
           
-          if (sourceData.weight !== undefined) {
+          // Handle weight field
+          if (sourceData.weight !== undefined && sourceData.weight !== null) {
             editData.weight = sourceData.weight;
           }
           
+          // Handle reps field if it exists
+          if (sourceData.reps !== undefined && sourceData.reps !== null) {
+            editData.reps = sourceData.reps;
+          }
+          
+          // Handle type_of_activity field
           if (sourceData.type_of_activity !== undefined) {
             editData.type_of_activity = sourceData.type_of_activity;
           }
@@ -180,15 +224,23 @@ export default function EventParticipantDetailScreen() {
           setFormValues(editData);
         }
       } else {
-        // Initialize new form with default values
-        const initialValues: Record<string, any> = {
-          is_success: true,
-          attempt_id: getNextAttemptId,
-        };
-        setFormValues(initialValues);
+        // Add mode: Initialize new form with default values
+        // Use functional update to check current formValues state
+        setIsEditMode(false);
+        setSelectedMetric(null);
+        setFormValues(prevValues => {
+          // If formValues already has an attempt_id (set when clicking add button on a row), preserve it
+          // Otherwise, use getNextAttemptId
+          // Preserve other formValues that might have been set
+          return {
+            ...prevValues,
+            is_success: prevValues.is_success !== undefined ? prevValues.is_success : true,
+            attempt_id: prevValues.attempt_id || getNextAttemptId,
+          };
+        });
       }
     }
-  }, [showMetricsModal, showAddActivityModal, editingAttemptId, eventData?.attempts, metricsData, getNextAttemptId]);
+  }, [showMetricsModal, showAddActivityModal, isEditMode, selectedMetric, editingAttemptId, eventData?.attempts, metricsData, getNextAttemptId]);
 
   // Get tournament accent color
   const accent = useMemo(() => {
@@ -1010,7 +1062,7 @@ export default function EventParticipantDetailScreen() {
                       style={{
                         paddingVertical: 12,
                         paddingHorizontal: 12,
-                        borderRightWidth: index < tableColumns.length - 1 ? 1 : 0,
+                        borderRightWidth: 1,
                         borderRightColor: colors['border-default'],
                         minWidth: 100,
                       }}
@@ -1027,6 +1079,26 @@ export default function EventParticipantDetailScreen() {
                       </Text>
                     </View>
                   ))}
+                  {/* Edit Column Header */}
+                  <View
+                    style={{
+                      paddingVertical: 12,
+                      paddingHorizontal: 12,
+                      minWidth: 80,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 13,
+                      fontFamily: getFontFamily('semibold'),
+                      color: isDark 
+                        ? (accent ? accent.primary : colors['text-primary'])
+                        : (accent ? accent.primary : colors['text-primary']),
+                    }}>
+                      Edit
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Table Rows */}
@@ -1036,43 +1108,8 @@ export default function EventParticipantDetailScreen() {
                   const existingMetric = metricsData.find(m => m.attempt_id === row.attempt_id);
                   
                   return (
-                  <TouchableOpacity
+                  <View
                     key={row.attempt_id}
-                    onPress={() => {
-                      if (hasData && existingMetric) {
-                        // Find the attempt in eventData to get the attempt ID for editing
-                        const existingAttempt = eventData?.attempts?.find(
-                          a => a.type === 'metric' && a.data.attempt_id === row.attempt_id
-                        );
-                        if (existingAttempt) {
-                          // Set editingAttemptId - the useEffect will populate form from metricsData
-                          setEditingAttemptId(existingAttempt.id);
-                        } else {
-                          // Data exists in backend but not in local state - create new form with data from metricsData
-                          setEditingAttemptId(null);
-                          const formData: Record<string, any> = {
-                            attempt_id: row.attempt_id,
-                            is_success: existingMetric.is_success !== undefined ? existingMetric.is_success : true,
-                          };
-                          if (existingMetric.time !== undefined) {
-                            formData.time = formatTime(existingMetric.time);
-                          }
-                          if (existingMetric.weight !== undefined) {
-                            formData.weight = existingMetric.weight;
-                          }
-                          if (existingMetric.type_of_activity) {
-                            formData.type_of_activity = existingMetric.type_of_activity;
-                          }
-                          setFormValues(formData);
-                        }
-                      } else {
-                        // New attempt - pre-fill attempt_id
-                        setEditingAttemptId(null);
-                        setFormValues({ attempt_id: row.attempt_id });
-                      }
-                      setShowMetricsModal(true);
-                    }}
-                    activeOpacity={0.7}
                     style={{
                       flexDirection: 'row',
                       borderBottomWidth: rowIndex < tableRows.length - 1 ? 1 : 0,
@@ -1090,7 +1127,7 @@ export default function EventParticipantDetailScreen() {
                           style={{
                             paddingVertical: 12,
                             paddingHorizontal: 12,
-                            borderRightWidth: colIndex < tableColumns.length - 1 ? 1 : 0,
+                            borderRightWidth: 1,
                             borderRightColor: colors['border-default'],
                             minWidth: 100,
                             justifyContent: 'center',
@@ -1123,7 +1160,52 @@ export default function EventParticipantDetailScreen() {
                         </View>
                       );
                     })}
-                  </TouchableOpacity>
+                    {/* Edit Column */}
+                    <View
+                      style={{
+                        paddingVertical: 12,
+                        paddingHorizontal: 12,
+                        borderRightWidth: 0,
+                        minWidth: 80,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (hasData && existingMetric) {
+                            // Edit mode: Set edit mode and selected metric
+                            setIsEditMode(true);
+                            setSelectedMetric(existingMetric);
+                            setShowMetricsModal(true);
+                          } else {
+                            // Add mode: Set attempt_id and open modal in add mode
+                            setIsEditMode(false);
+                            setSelectedMetric(null);
+                            setEditingAttemptId(null);
+                            // Set form values with the attempt_id for this row
+                            const initialValues: Record<string, any> = {
+                              is_success: true,
+                              attempt_id: row.attempt_id,
+                            };
+                            setFormValues(initialValues);
+                            setShowMetricsModal(true);
+                          }
+                        }}
+                        style={{
+                          padding: 8,
+                          borderRadius: 8,
+                          backgroundColor: accent ? accent.primary + '20' : colors['bg-secondary'],
+                        }}
+                      >
+                        <Ionicons 
+                          name={hasData && existingMetric ? "create-outline" : "add-outline"} 
+                          size={20} 
+                          color={accent ? accent.primary : colors['bg-primary']} 
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                   );
                 })}
               </View>
@@ -1225,6 +1307,59 @@ export default function EventParticipantDetailScreen() {
                 accent={accent}
                 isDark={isDark}
                 onEdit={(attemptId) => {
+                  // Find the attempt to edit
+                  const attemptToEdit = eventData?.attempts?.find(a => a.id === attemptId);
+                  
+                  if (attemptToEdit && attemptToEdit.data) {
+                    // Try to get more recent data from metricsData if available
+                    let metricFromApi: ActivityMetric | undefined;
+                    if (attemptToEdit.data.attempt_id !== undefined) {
+                      metricFromApi = metricsData.find(m => m.attempt_id === attemptToEdit.data.attempt_id);
+                    }
+                    
+                    // Use API data if available, otherwise use eventData
+                    const sourceData = metricFromApi || attemptToEdit.data;
+                    
+                    // Prefill form with existing data
+                    const formData: Record<string, any> = {
+                      is_success: sourceData.is_success !== undefined ? sourceData.is_success : true,
+                    };
+                    
+                    // Always include attempt_id if available
+                    if (sourceData.attempt_id !== undefined) {
+                      formData.attempt_id = sourceData.attempt_id;
+                    } else if (attemptToEdit.data.attempt_id !== undefined) {
+                      formData.attempt_id = attemptToEdit.data.attempt_id;
+                    }
+                    
+                    // Handle time field - convert from seconds to time string format
+                    if (sourceData.time !== undefined && sourceData.time !== null) {
+                      if (typeof sourceData.time === 'number') {
+                        formData.time = formatTime(sourceData.time);
+                      } else if (typeof sourceData.time === 'string') {
+                        formData.time = sourceData.time;
+                      }
+                    }
+                    
+                    // Handle weight field
+                    if (sourceData.weight !== undefined && sourceData.weight !== null) {
+                      formData.weight = sourceData.weight;
+                    }
+                    
+                    // Handle reps field if it exists
+                    if (sourceData.reps !== undefined && sourceData.reps !== null) {
+                      formData.reps = sourceData.reps;
+                    }
+                    
+                    // Handle type_of_activity field
+                    if (sourceData.type_of_activity !== undefined) {
+                      formData.type_of_activity = sourceData.type_of_activity;
+                    }
+                    
+                    // Set form values immediately
+                    setFormValues(formData);
+                  }
+                  
                   setEditingAttemptId(attemptId);
                   setShowMetricsModal(true);
                 }}
@@ -1357,9 +1492,11 @@ export default function EventParticipantDetailScreen() {
         is_deleted: false,
       };
 
-      // Use updateActivity if editing existing data, otherwise use addActivity
-      const isUpdating = !!editingAttemptId;
+      // Use updateActivity if in edit mode, otherwise use addActivity
+      // Edit mode: Use selectedMetric to determine if updating
+      const isUpdating = isEditMode && selectedMetric !== null;
       if (isUpdating) {
+        // Update metric using updateActivity (which handles metric updates)
         await updateActivity(activityData);
       } else {
         await addActivity(activityData);
@@ -1383,12 +1520,15 @@ export default function EventParticipantDetailScreen() {
         data: updateData,
       });
 
+      // Reset edit mode and form state
+      setIsEditMode(false);
+      setSelectedMetric(null);
       setEditingAttemptId(null);
       setFormValues({});
       setIsSubmitting(false);
       setShowMetricsModal(false);
       
-      // Refresh metrics data after update or add to ensure UI is in sync
+      // Refresh metrics data after update or add to ensure UI is in sync (updates table without full reload)
       if (eventId && participantId) {
         try {
           const metrics = await getMetrics(parseInt(eventId), parseInt(participantId));
@@ -1415,6 +1555,8 @@ export default function EventParticipantDetailScreen() {
       onRequestClose={() => {
         if (!isSubmitting) {
           setShowMetricsModal(false);
+          setIsEditMode(false);
+          setSelectedMetric(null);
           setFormValues({});
         }
       }}
@@ -1433,6 +1575,8 @@ export default function EventParticipantDetailScreen() {
           onPress={() => {
             if (!isSubmitting) {
               setShowMetricsModal(false);
+              setIsEditMode(false);
+              setSelectedMetric(null);
               setFormValues({});
             }
           }}
@@ -1463,13 +1607,15 @@ export default function EventParticipantDetailScreen() {
                   color: colors['text-primary'],
                   marginLeft: 8,
                   }}>
-                  {editingAttemptId ? 'Edit Metric' : 'Add Metric'}
+                  {isEditMode ? 'Edit Metric' : 'Add Metric'}
                   </Text>
               </View>
               <TouchableOpacity
                 onPress={() => {
                   if (!isSubmitting) {
                     setShowMetricsModal(false);
+                    setIsEditMode(false);
+                    setSelectedMetric(null);
                     setEditingAttemptId(null);
                     setFormValues({});
                   }
@@ -1485,6 +1631,37 @@ export default function EventParticipantDetailScreen() {
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 20 }}
             >
+              {/* Show Attempt ID at top in edit mode (read-only) */}
+              {isEditMode && selectedMetric && (
+                <View style={{ marginBottom: 16 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                    <Ionicons name="pricetag-outline" size={18} color={accent ? accent.primary : colors['bg-primary']} />
+                    <Text style={{
+                      fontSize: 14,
+                      fontFamily: getFontFamily('medium'),
+                      color: colors['text-primary'],
+                      marginLeft: 8,
+                    }}>
+                      Attempt ID
+                    </Text>
+                  </View>
+                  <TextInput
+                    value={selectedMetric.attempt_id?.toString() || ''}
+                    editable={false}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors['border-default'],
+                      borderRadius: 8,
+                      padding: 12,
+                      color: colors['text-secondary'],
+                      fontFamily: getFontFamily('regular'),
+                      backgroundColor: colors['bg-secondary'],
+                      fontSize: 14,
+                      opacity: 0.6,
+                    }}
+                  />
+                </View>
+              )}
               {memoizedMetricsFields}
 
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, marginBottom: 10 }}>
@@ -1493,6 +1670,8 @@ export default function EventParticipantDetailScreen() {
                   onPress={() => {
                     if (!isSubmitting) {
                       setShowMetricsModal(false);
+                      setIsEditMode(false);
+                      setSelectedMetric(null);
                       setEditingAttemptId(null);
                       setFormValues({});
                     }
@@ -1503,7 +1682,7 @@ export default function EventParticipantDetailScreen() {
                   style={{ flex: 1 }}
                 />
                 <Button
-                  title={isSubmitting ? (editingAttemptId ? "Updating..." : "Adding...") : (editingAttemptId ? "Update Metric" : "Add Metric")}
+                  title={isSubmitting ? (isEditMode ? "Updating..." : "Adding...") : (isEditMode ? "Update Metric" : "Add Metric")}
                   onPress={handleSubmitMetrics}
                   variant="primary"
                   size="medium"

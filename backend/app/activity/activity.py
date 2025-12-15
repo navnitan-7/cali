@@ -61,12 +61,17 @@ async def add_activity(activity: Activity, current_user: dict = Depends(get_curr
 @router.put("/update_activity/")
 async def update_activity(activity: Activity, current_user: dict = Depends(get_current_user)):
     # Validate event_id exists in constants
+    print(activity.event_id)
+    print(activity.attempt_id)
+    print(MAX_ATTEMPTS_PER_EVENT[activity.event_id])
+    print(activity.time)
     if activity.event_id not in ACTIVITY_FIELDS_BY_EVENT:
         raise HTTPException(status_code=400, detail="Invalid event id")
     
     # Get required fields for this event_id and check if the attempt_id is valid
     required_fields = set(ACTIVITY_FIELDS_BY_EVENT[activity.event_id])
-    if activity.attempt_id not in MAX_ATTEMPTS_PER_EVENT[activity.event_id]:
+    max_attempts = MAX_ATTEMPTS_PER_EVENT[activity.event_id]
+    if not (1 <= activity.attempt_id <= max_attempts):
         raise HTTPException(status_code=400, detail="Invalid attempt id")
     
     # Validate that required fields are provided based on event_id
