@@ -99,7 +99,8 @@ export default function EventParticipantDetailScreen() {
       const fetchMetrics = async () => {
         try {
           setIsLoadingMetrics(true);
-          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId));
+          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the API
+          const metrics = await getMetrics(eventTypeId, parseInt(participantId));
           setMetricsData(metrics || []);
         } catch (error) {
           console.error('Error fetching metrics:', error);
@@ -310,7 +311,8 @@ export default function EventParticipantDetailScreen() {
       // Prepare activity data for backend with all required fields
       // Use validated values for required fields, and formValues for optional fields
         const activityData: AddActivityData = {
-          event_id: parseInt(eventId),
+          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the backend
+          event_id: eventTypeId,
           participant_id: parseInt(participantId),
           attempt_id: requiredFields.includes('attempt_id')
             ? (typeof validatedValues['attempt_id'] === 'number' 
@@ -430,11 +432,10 @@ export default function EventParticipantDetailScreen() {
     Alert.alert('Coming Soon', 'Video upload functionality will be available soon');
   };
 
-  // Get metrics fields - include all required fields except attempt_id (which is handled separately)
+  // Get metrics fields - include all required fields (including attempt_id)
   const metricsFields = useMemo(() => {
-    // Include all required fields except attempt_id (attempt_id is shown separately in edit mode or set automatically)
-    const fields = requiredFields.filter(f => f !== 'attempt_id');
-    return fields;
+    // Include all required fields
+    return requiredFields;
   }, [requiredFields]);
 
   // Get all activity fields (including attempt_id, is_success) - always include is_success
@@ -469,7 +470,25 @@ export default function EventParticipantDetailScreen() {
           </Text>
         </View>
 
-        {field === 'time' ? (
+        {field === 'attempt_id' ? (
+          <TextInput
+            placeholder="Attempt ID"
+            placeholderTextColor={colors['text-secondary']}
+            value={formValues[field]?.toString() || ''}
+            editable={false}
+            style={{
+              borderWidth: 1,
+              borderColor: colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-secondary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 14,
+              opacity: 0.6,
+            }}
+          />
+        ) : field === 'time' ? (
           <TimePicker
             value={formValues[field] || '00:00:000'}
             onChange={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
@@ -1452,7 +1471,7 @@ export default function EventParticipantDetailScreen() {
   // Memoized metrics fields
   const memoizedMetricsFields = useMemo(() => {
     return metricsFields.map(field => renderMetricsField(field));
-  }, [metricsFields, formValues, colors, accent, isDark]);
+  }, [metricsFields, formValues, colors, accent, isDark, isEditMode, selectedMetric]);
 
   // Memoized activity fields
   const memoizedActivityFields = useMemo(() => {
@@ -1474,6 +1493,22 @@ export default function EventParticipantDetailScreen() {
         continue;
       }
       
+      // Special handling for attempt_id - must be a valid number
+      if (field === 'attempt_id') {
+        const value = formValues[field];
+        if (value === undefined || value === null || value === '') {
+          Alert.alert('Error', `${FIELD_LABELS[field]} is required`);
+          return;
+        }
+        const attemptIdNum = typeof value === 'number' ? value : parseInt(value);
+        if (isNaN(attemptIdNum)) {
+          Alert.alert('Error', `${FIELD_LABELS[field]} must be a valid number`);
+          return;
+        }
+        validatedValues[field] = attemptIdNum;
+        continue;
+      }
+      
       const value = formValues[field];
       const isEmpty = value === undefined || value === null || value === '' || 
                      (typeof value === 'string' && value.trim() === '');
@@ -1489,11 +1524,9 @@ export default function EventParticipantDetailScreen() {
     try {
       setIsSubmitting(true);
 
-      // Get attempt_id from form or use calculated next attempt_id
+      // Get attempt_id from validated values or form values
       const attemptId = validatedValues['attempt_id'] !== undefined
-        ? (typeof validatedValues['attempt_id'] === 'number' 
-            ? validatedValues['attempt_id'] 
-            : parseInt(validatedValues['attempt_id']))
+        ? validatedValues['attempt_id']
         : (formValues['attempt_id'] !== undefined
             ? (typeof formValues['attempt_id'] === 'number'
                 ? formValues['attempt_id']
@@ -1501,8 +1534,9 @@ export default function EventParticipantDetailScreen() {
             : getNextAttemptId);
 
       // Prepare activity data for backend
+      // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the backend
       const activityData: AddActivityData = {
-        event_id: parseInt(eventId),
+        event_id: eventTypeId,
         participant_id: parseInt(participantId),
         attempt_id: attemptId,
         // Use form value for type_of_activity (selected from the list)
@@ -1555,9 +1589,10 @@ export default function EventParticipantDetailScreen() {
       setShowMetricsModal(false);
       
       // Refresh metrics data after update or add to ensure UI is in sync (updates table without full reload)
-      if (eventId && participantId) {
+      if (eventTypeId && participantId) {
         try {
-          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId));
+          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the API
+          const metrics = await getMetrics(eventTypeId, parseInt(participantId));
           setMetricsData(metrics || []);
         } catch (error) {
           console.error('Error refreshing metrics:', error);
@@ -1657,37 +1692,6 @@ export default function EventParticipantDetailScreen() {
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ paddingBottom: 20 }}
             >
-              {/* Show Attempt ID at top in edit mode (read-only) */}
-              {isEditMode && selectedMetric && (
-                <View style={{ marginBottom: 16 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                    <Ionicons name="pricetag-outline" size={18} color={accent ? accent.primary : colors['bg-primary']} />
-                    <Text style={{
-                      fontSize: 14,
-                      fontFamily: getFontFamily('medium'),
-                      color: colors['text-primary'],
-                      marginLeft: 8,
-                    }}>
-                      Attempt ID
-                    </Text>
-                  </View>
-                  <TextInput
-                    value={selectedMetric.attempt_id?.toString() || ''}
-                    editable={false}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: colors['border-default'],
-                      borderRadius: 8,
-                      padding: 12,
-                      color: colors['text-secondary'],
-                      fontFamily: getFontFamily('regular'),
-                      backgroundColor: colors['bg-secondary'],
-                      fontSize: 14,
-                      opacity: 0.6,
-                    }}
-                  />
-                </View>
-              )}
               {memoizedMetricsFields}
 
               <View style={{ flexDirection: 'row', gap: 12, marginTop: 20, marginBottom: 10 }}>
