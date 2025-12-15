@@ -6,7 +6,16 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "prebuild": "expo prebuild --clean",
+    "build:android": "eas build --platform android --profile preview",
+    "build:ios": "eas build --platform ios --profile preview",
+    "build:all": "eas build --platform all --profile preview",
+    "build:android:prod": "eas build --platform android --profile production",
+    "build:ios:prod": "eas build --platform ios --profile production",
+    "build:android:local": "npm run prebuild && cd android && ./gradlew assembleRelease",
+    "build:android:local:debug": "npm run prebuild && cd android && ./gradlew assembleDebug",
+    "build:ios:local": "npm run prebuild && cd ios && xcodebuild -workspace RepX.xcworkspace -scheme RepX -configuration Release -archivePath build/RepX.xcarchive archive && xcodebuild -exportArchive -archivePath build/RepX.xcarchive -exportPath build -exportOptionsPlist ExportOptions.plist"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

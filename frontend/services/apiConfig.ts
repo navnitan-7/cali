@@ -37,13 +37,8 @@ const getApiBaseUrl = () => {
   }
   
   // Default based on platform (fallback if no env var)
-  if (Platform.OS === 'android') {
-    // Default for Android emulator
-    return 'http://10.0.2.2:61944';
-  }
-  
-  // iOS simulator and web can use localhost
-  return 'http://localhost:61944';
+  // Default to production backend
+  return 'http://54.90.211.193:8000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
