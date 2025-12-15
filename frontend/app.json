@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.repx.app"
+      "bundleIdentifier": "com.repx.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.repx.app",
@@ -22,7 +25,8 @@
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE"
-      ]
+      ],
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro",

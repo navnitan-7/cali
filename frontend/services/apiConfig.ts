@@ -45,6 +45,7 @@ const API_BASE_URL = getApiBaseUrl();
 
 // Log the API URL being used (helpful for debugging)
 console.log(`[API Config] Using API Base URL: ${API_BASE_URL} (Platform: ${Platform.OS})`);
+console.log(`[API Config] Environment URL: ${process.env.EXPO_PUBLIC_API_URL || 'not set'}`);
 
 // Cross-platform storage utility
 const storage = {
