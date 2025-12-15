@@ -11,7 +11,7 @@ import { useTournamentStore, EventParticipantData } from '@/stores/tournamentSto
 import { activityService, AddActivityData, ActivityMetric } from '@/services/activityService';
 import { useActivityApi } from '@/hooks/useApiIntegration';
 import { useEventTypesStore } from '@/stores/eventTypesStore';
-import { ACTIVITY_FIELDS_BY_EVENT, MAX_ATTEMPTS_PER_EVENT, FIELD_LABELS, FIELD_ICONS } from '@/constants/activityFields';
+import { ACTIVITY_FIELDS_BY_EVENT, MAX_ATTEMPTS_PER_EVENT, FIELD_LABELS, FIELD_ICONS, ACTIVITY_TYPES } from '@/constants/activityFields';
 import Button from '@/components/ui/Button';
 import TabSwitch from '@/components/ui/TabSwitch';
 import TimePicker from '@/components/ui/TimePicker';
@@ -232,15 +232,17 @@ export default function EventParticipantDetailScreen() {
           // If formValues already has an attempt_id (set when clicking add button on a row), preserve it
           // Otherwise, use getNextAttemptId
           // Preserve other formValues that might have been set
-          return {
+          const initialValues: Record<string, any> = {
             ...prevValues,
             is_success: prevValues.is_success !== undefined ? prevValues.is_success : true,
             attempt_id: prevValues.attempt_id || getNextAttemptId,
           };
+          // type_of_activity should be selected by user from the list, not auto-filled
+          return initialValues;
         });
       }
     }
-  }, [showMetricsModal, showAddActivityModal, isEditMode, selectedMetric, editingAttemptId, eventData?.attempts, metricsData, getNextAttemptId]);
+  }, [showMetricsModal, showAddActivityModal, isEditMode, selectedMetric, editingAttemptId, eventData?.attempts, metricsData, getNextAttemptId, requiredFields, activityType, event]);
 
   // Get tournament accent color
   const accent = useMemo(() => {
@@ -263,10 +265,8 @@ export default function EventParticipantDetailScreen() {
     if (!tournamentId || !eventId || !participantId || !eventTypeId) return;
 
     // Validate required fields - check for empty strings and whitespace
-    // Skip type_of_activity as it's auto-populated from event
     const validatedValues: Record<string, any> = {};
     for (const field of requiredFields) {
-      if (field === 'type_of_activity') continue; // Skip type_of_activity as it's auto-populated from event
       
       const value = formValues[field];
       
@@ -309,17 +309,16 @@ export default function EventParticipantDetailScreen() {
 
       // Prepare activity data for backend with all required fields
       // Use validated values for required fields, and formValues for optional fields
-      // type_of_activity is automatically taken from event category/name
-      const activityData: AddActivityData = {
-        event_id: parseInt(eventId),
-        participant_id: parseInt(participantId),
-        attempt_id: requiredFields.includes('attempt_id')
-          ? (typeof validatedValues['attempt_id'] === 'number' 
-              ? validatedValues['attempt_id'] 
-              : parseInt(validatedValues['attempt_id']))
-          : Date.now(), // Fallback to auto-generate if not required
-        // type_of_activity is automatically populated from event category/name
-        type_of_activity: activityType || event?.name || '',
+        const activityData: AddActivityData = {
+          event_id: parseInt(eventId),
+          participant_id: parseInt(participantId),
+          attempt_id: requiredFields.includes('attempt_id')
+            ? (typeof validatedValues['attempt_id'] === 'number' 
+                ? validatedValues['attempt_id'] 
+                : parseInt(validatedValues['attempt_id']))
+            : Date.now(), // Fallback to auto-generate if not required
+          // Use form value for type_of_activity (selected from the list)
+          type_of_activity: validatedValues['type_of_activity'] || formValues['type_of_activity'] || '',
         weight: requiredFields.includes('weight')
           ? (typeof validatedValues['weight'] === 'number' 
               ? validatedValues['weight'] 
@@ -353,15 +352,10 @@ export default function EventParticipantDetailScreen() {
       // Update local state
       const updateData: Record<string, any> = {};
       requiredFields.forEach(reqField => {
-        if (reqField !== 'attempt_id' && reqField !== 'type_of_activity' && formValues[reqField] !== undefined) {
+        if (reqField !== 'attempt_id' && formValues[reqField] !== undefined) {
           updateData[reqField] = formValues[reqField];
         }
       });
-
-      // Add type_of_activity to updateData if it's required (it's auto-populated)
-      if (requiredFields.includes('type_of_activity')) {
-        updateData.type_of_activity = activityType || event?.name || '';
-      }
 
       updateEventParticipantData(tournamentId, eventId, participantId, updateData);
 
@@ -373,9 +367,6 @@ export default function EventParticipantDetailScreen() {
         : (formValues['is_success'] !== undefined 
             ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
             : true); // Default to true
-      if (requiredFields.includes('type_of_activity')) {
-        attemptData.type_of_activity = activityType || event?.name || '';
-      }
 
       addEventParticipantAttempt(tournamentId, eventId, participantId, {
         type: 'metric',
@@ -439,13 +430,10 @@ export default function EventParticipantDetailScreen() {
     Alert.alert('Coming Soon', 'Video upload functionality will be available soon');
   };
 
-  // Get metrics fields (time, weight, etc.) - exclude type_of_activity, but always include is_success
+  // Get metrics fields - include all required fields except attempt_id (which is handled separately)
   const metricsFields = useMemo(() => {
-    const fields = requiredFields.filter(f => f !== 'attempt_id' && f !== 'type_of_activity' && f !== 'is_success');
-    // Always add is_success to metrics fields
-    if (!fields.includes('is_success')) {
-      fields.push('is_success');
-    }
+    // Include all required fields except attempt_id (attempt_id is shown separately in edit mode or set automatically)
+    const fields = requiredFields.filter(f => f !== 'attempt_id');
     return fields;
   }, [requiredFields]);
 
@@ -507,6 +495,43 @@ export default function EventParticipantDetailScreen() {
               fontSize: 14,
             }}
           />
+        ) : field === 'type_of_activity' ? (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {ACTIVITY_TYPES.map((activityType) => {
+              const isSelected = formValues[field] === activityType;
+              return (
+                <TouchableOpacity
+                  key={activityType}
+                  onPress={() => setFormValues(prev => ({ ...prev, [field]: activityType }))}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 20,
+                    backgroundColor: isSelected 
+                      ? (accent?.primary || colors['bg-primary']) + '20'
+                      : colors['bg-secondary'],
+                    borderWidth: 2,
+                    borderColor: isSelected 
+                      ? (accent?.primary || colors['bg-primary'])
+                      : colors['border-default'],
+                    marginRight: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 14,
+                    fontFamily: getFontFamily(isSelected ? 'semibold' : 'regular'),
+                    color: isSelected 
+                      ? (accent?.primary || colors['bg-primary'])
+                      : colors['text-primary'],
+                    textTransform: 'capitalize',
+                  }}>
+                    {activityType}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         ) : field === 'is_success' ? (
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Switch
@@ -1480,7 +1505,8 @@ export default function EventParticipantDetailScreen() {
         event_id: parseInt(eventId),
         participant_id: parseInt(participantId),
         attempt_id: attemptId,
-        type_of_activity: activityType || event?.name || '',
+        // Use form value for type_of_activity (selected from the list)
+        type_of_activity: validatedValues['type_of_activity'] || formValues['type_of_activity'] || '',
         weight: validatedValues['weight'] ? parseFloat(validatedValues['weight']) : null,
         time: validatedValues['time'] ? parseTimeToSeconds(validatedValues['time']) : null,
         is_success: validatedValues['is_success'] !== undefined 
