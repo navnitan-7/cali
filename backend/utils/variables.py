@@ -13,7 +13,7 @@ class Participant(BaseModel):
 
 class Event(BaseModel):
     name: str
-    description: str
+    description: str | None = None
     event_type: int
 
 class Activity(BaseModel):
@@ -26,3 +26,19 @@ class Activity(BaseModel):
     time: float | None = None
     is_success: bool | None = None
     is_deleted: bool | None = None
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    full_name: str
+
+class UserLogin(BaseModel):
+    name: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    name: str | None = None
