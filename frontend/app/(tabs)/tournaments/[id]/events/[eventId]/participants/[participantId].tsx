@@ -99,8 +99,8 @@ export default function EventParticipantDetailScreen() {
       const fetchMetrics = async () => {
         try {
           setIsLoadingMetrics(true);
-          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the API
-          const metrics = await getMetrics(eventTypeId, parseInt(participantId));
+          // Use the actual event database ID from URL params and event type for validation
+          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId), eventTypeId!);
           setMetricsData(metrics || []);
         } catch (error) {
           console.error('Error fetching metrics:', error);
@@ -148,10 +148,10 @@ export default function EventParticipantDetailScreen() {
           is_success: selectedMetric.is_success !== undefined ? selectedMetric.is_success : true,
         };
         
-        // Handle time field - convert from seconds to time string format
+        // Handle time field - convert from milliseconds to time string format
         if (selectedMetric.time !== undefined && selectedMetric.time !== null) {
           if (typeof selectedMetric.time === 'number') {
-            formData.time = secondsToTimeString(selectedMetric.time);
+            formData.time = millisecondsToTimeString(selectedMetric.time);
           } else if (typeof selectedMetric.time === 'string') {
             formData.time = selectedMetric.time;
           }
@@ -198,10 +198,10 @@ export default function EventParticipantDetailScreen() {
             editData.attempt_id = attemptToEdit.data.attempt_id;
           }
           
-          // Handle time field - convert from seconds to time string format
+          // Handle time field - convert from milliseconds to time string format
           if (sourceData.time !== undefined) {
             if (typeof sourceData.time === 'number') {
-              editData.time = secondsToTimeString(sourceData.time);
+              editData.time = millisecondsToTimeString(sourceData.time);
             } else if (typeof sourceData.time === 'string') {
               editData.time = sourceData.time;
             }
@@ -311,8 +311,10 @@ export default function EventParticipantDetailScreen() {
       // Prepare activity data for backend with all required fields
       // Use validated values for required fields, and formValues for optional fields
         const activityData: AddActivityData = {
-          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the backend
-          event_id: eventTypeId,
+          // Use the actual event database ID from URL params
+          event_id: parseInt(eventId),
+          // Use event type ID (1, 2, 3, 4) for validation
+          event_type: eventTypeId!,
           participant_id: parseInt(participantId),
           attempt_id: requiredFields.includes('attempt_id')
             ? (typeof validatedValues['attempt_id'] === 'number' 
@@ -392,41 +394,44 @@ export default function EventParticipantDetailScreen() {
     }
   };
 
-  // Helper to parse time string to seconds (with milliseconds/microseconds as decimal)
-  const parseTimeToSeconds = (timeStr: string): number => {
-    const parts = timeStr.split(':').map(Number);
+  // Helper to parse time string to milliseconds
+  // Supports formats: MM:SS, MM:SS:mmm, MM:SS.mmm
+  const parseTimeToMilliseconds = (timeStr: string): number => {
+    // Handle both : and . as separators (normalize to :)
+    const normalizedStr = timeStr.replace('.', ':');
+    const parts = normalizedStr.split(':');
+    
     if (parts.length === 2) {
-      // MM:SS format
-      return parts[0] * 60 + parts[1];
+      // MM:SS format - no milliseconds
+      const minutes = parseInt(parts[0], 10) || 0;
+      const seconds = parseInt(parts[1], 10) || 0;
+      return minutes * 60000 + seconds * 1000;
     } else if (parts.length === 3) {
-      // Check if third part is hours (0-23) or milliseconds (0-999)
-      if (parts[0] < 24 && parts[1] < 60 && parts[2] < 60) {
-        // HH:MM:SS format
-        return parts[0] * 3600 + parts[1] * 60 + parts[2];
-      } else {
-        // MM:SS:MS format - convert to seconds with milliseconds as decimal
-        return parts[0] * 60 + parts[1] + parts[2] / 1000;
-      }
-    } else if (parts.length === 4) {
-      // MM:SS:MS:US format - convert to seconds with microseconds as decimal
-      return parts[0] * 60 + parts[1] + parts[2] / 1000 + parts[3] / 1000000;
+      // MM:SS:mmm format (minutes:seconds:milliseconds)
+      const minutes = parseInt(parts[0], 10) || 0;
+      const seconds = parseInt(parts[1], 10) || 0;
+      // Pad or trim to 3 digits for milliseconds
+      let msStr = parts[2].padEnd(3, '0').slice(0, 3);
+      const milliseconds = parseInt(msStr, 10) || 0;
+      return minutes * 60000 + seconds * 1000 + milliseconds;
     }
     return 0;
   };
+  
+  // Alias for backward compatibility
+  const parseTimeToSeconds = parseTimeToMilliseconds;
 
-  // Helper to convert seconds to time string format (MM:SS:MS:US)
-  const secondsToTimeString = (seconds: number): string => {
-    const totalSeconds = Math.floor(seconds);
-    const minutes = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
+  // Helper to convert milliseconds to time string format (MM:SS:mmm)
+  const millisecondsToTimeString = (totalMs: number): string => {
+    const minutes = Math.floor(totalMs / 60000);
+    const seconds = Math.floor((totalMs % 60000) / 1000);
+    const milliseconds = totalMs % 1000;
     
-    // Extract milliseconds and microseconds from decimal part
-    const decimalPart = seconds - totalSeconds;
-    const milliseconds = Math.floor(decimalPart * 1000);
-    const microseconds = Math.floor((decimalPart * 1000 - milliseconds) * 1000);
-    
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${milliseconds.toString().padStart(3, '0')}:${microseconds.toString().padStart(3, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}:${milliseconds.toString().padStart(3, '0')}`;
   };
+  
+  // Alias for backward compatibility
+  const secondsToTimeString = millisecondsToTimeString;
 
   const handleAddVideo = () => {
     Alert.alert('Coming Soon', 'Video upload functionality will be available soon');
@@ -979,16 +984,14 @@ export default function EventParticipantDetailScreen() {
     );
   });
 
-  // Helper to format time from seconds to readable format
-  const formatTime = (seconds?: number): string => {
-    if (seconds === undefined || seconds === null) return '';
-    const totalSeconds = Math.floor(seconds);
-    const minutes = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    const decimalPart = seconds - totalSeconds;
-    const milliseconds = Math.floor(decimalPart * 1000);
-    const microseconds = Math.floor((decimalPart * 1000 - milliseconds) * 1000);
-    return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${milliseconds.toString().padStart(3, '0')}:${microseconds.toString().padStart(3, '0')}`;
+  // Helper to format time from milliseconds to readable format
+  const formatTime = (milliseconds?: number): string => {
+    if (milliseconds === undefined || milliseconds === null) return '';
+    const totalMs = Math.floor(milliseconds);
+    const minutes = Math.floor(totalMs / 60000);
+    const seconds = Math.floor((totalMs % 60000) / 1000);
+    const ms = totalMs % 1000;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
   };
 
   // Get table columns (attempt_id + required fields excluding attempt_id)
@@ -1108,7 +1111,7 @@ export default function EventParticipantDetailScreen() {
                         paddingHorizontal: 12,
                         borderRightWidth: 1,
                         borderRightColor: colors['border-default'],
-                        minWidth: 100,
+                        width: 120,
                       }}
                     >
                       <Text style={{
@@ -1128,7 +1131,7 @@ export default function EventParticipantDetailScreen() {
                     style={{
                       paddingVertical: 12,
                       paddingHorizontal: 12,
-                      minWidth: 80,
+                      width: 80,
                       justifyContent: 'center',
                       alignItems: 'center',
                     }}
@@ -1173,7 +1176,7 @@ export default function EventParticipantDetailScreen() {
                             paddingHorizontal: 12,
                             borderRightWidth: 1,
                             borderRightColor: colors['border-default'],
-                            minWidth: 100,
+                            width: 120,
                             justifyContent: 'center',
                           }}
                         >
@@ -1210,7 +1213,7 @@ export default function EventParticipantDetailScreen() {
                         paddingVertical: 12,
                         paddingHorizontal: 12,
                         borderRightWidth: 0,
-                        minWidth: 80,
+                        width: 80,
                         justifyContent: 'center',
                         alignItems: 'center',
                       }}
@@ -1376,10 +1379,10 @@ export default function EventParticipantDetailScreen() {
                       formData.attempt_id = attemptToEdit.data.attempt_id;
                     }
                     
-                    // Handle time field - convert from seconds to time string format
+                    // Handle time field - convert from milliseconds to time string format
                     if (sourceData.time !== undefined && sourceData.time !== null) {
                       if (typeof sourceData.time === 'number') {
-                        formData.time = formatTime(sourceData.time);
+                        formData.time = millisecondsToTimeString(sourceData.time);
                       } else if (typeof sourceData.time === 'string') {
                         formData.time = sourceData.time;
                       }
@@ -1534,9 +1537,11 @@ export default function EventParticipantDetailScreen() {
             : getNextAttemptId);
 
       // Prepare activity data for backend
-      // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the backend
+      // Use the actual event database ID from URL params
       const activityData: AddActivityData = {
-        event_id: eventTypeId,
+        event_id: parseInt(eventId),
+        // Use event type ID (1, 2, 3, 4) for validation
+        event_type: eventTypeId!,
         participant_id: parseInt(participantId),
         attempt_id: attemptId,
         // Use form value for type_of_activity (selected from the list)
@@ -1589,10 +1594,10 @@ export default function EventParticipantDetailScreen() {
       setShowMetricsModal(false);
       
       // Refresh metrics data after update or add to ensure UI is in sync (updates table without full reload)
-      if (eventTypeId && participantId) {
+      if (eventId && participantId) {
         try {
-          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the API
-          const metrics = await getMetrics(eventTypeId, parseInt(participantId));
+          // Use the actual event database ID from URL params and event type for validation
+          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId), eventTypeId!);
           setMetricsData(metrics || []);
         } catch (error) {
           console.error('Error refreshing metrics:', error);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -77,85 +77,92 @@ export default function CreateParticipantScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors['bg-surface'] }}>
-        <View style={{ flex: 1 }}>
-          {/* Top Navigation Bar with Save/Cancel */}
-          <View style={{
-            position: 'relative',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 16,
-            paddingTop: 8,
-            paddingBottom: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: colors['border-default'],
-            overflow: 'hidden',
-          }}>
-            {/* Subtle accent background */}
-            {accent && (
-              <View style={{
-                position: 'absolute',
-                top: -20,
-                right: -20,
-                width: 60,
-                height: 60,
-                borderRadius: 30,
-                backgroundColor: getAccentWithOpacity(0.06),
-              }} />
-            )}
-            
-            <TouchableOpacity 
-              onPress={() => router.back()}
-              style={{
-                width: 32,
-                height: 32,
-                alignItems: 'center',
-                justifyContent: 'center',
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <View style={{ flex: 1 }}>
+            {/* Top Navigation Bar with Save/Cancel */}
+            <View style={{
+              position: 'relative',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingTop: 8,
+              paddingBottom: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: colors['border-default'],
+              overflow: 'hidden',
+            }}>
+              {/* Subtle accent background */}
+              {accent && (
+                <View style={{
+                  position: 'absolute',
+                  top: -20,
+                  right: -20,
+                  width: 60,
+                  height: 60,
+                  borderRadius: 30,
+                  backgroundColor: getAccentWithOpacity(0.06),
+                }} />
+              )}
+              
+              <TouchableOpacity 
+                onPress={() => router.back()}
+                style={{
+                  width: 32,
+                  height: 32,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+              >
+                <Ionicons name="close" size={24} color={colors['text-primary']} />
+              </TouchableOpacity>
+              
+              <Text style={{
+                fontSize: 17,
+                fontFamily: getFontFamily('semibold'),
+                color: colors['text-primary'],
                 position: 'relative',
                 zIndex: 1,
-              }}
-            >
-              <Ionicons name="close" size={24} color={colors['text-primary']} />
-            </TouchableOpacity>
-            
-            <Text style={{
-              fontSize: 17,
-              fontFamily: getFontFamily('semibold'),
-              color: colors['text-primary'],
-              position: 'relative',
-              zIndex: 1,
-            }}>
-              Add Participant
-            </Text>
-            
-            <Button
-              title="Save"
-              onPress={handleSubmit}
-              variant="primary"
-              size="small"
-              disabled={!canSave || isSaving}
-              loading={isSaving}
-              style={{ minWidth: 60, position: 'relative', zIndex: 1 }}
-            />
-            
-            {/* Accent border */}
-            {accent && (
-              <View style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 2,
-                backgroundColor: getAccentWithOpacity(0.3),
-              }} />
-            )}
-          </View>
+              }}>
+                Add Participant
+              </Text>
+              
+              <Button
+                title="Save"
+                onPress={handleSubmit}
+                variant="primary"
+                size="small"
+                disabled={!canSave || isSaving}
+                loading={isSaving}
+                style={{ minWidth: 60, position: 'relative', zIndex: 1 }}
+              />
+              
+              {/* Accent border */}
+              {accent && (
+                <View style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  backgroundColor: getAccentWithOpacity(0.3),
+                }} />
+              )}
+            </View>
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 24, paddingBottom: insets.bottom + 40 }}
-            keyboardShouldPersistTaps="handled"
-          >
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 24, paddingBottom: Math.max(insets.bottom + 40, 100) }}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              showsVerticalScrollIndicator={true}
+            >
             {/* Name - Required */}
             <View style={{ marginBottom: 24 }}>
               <Text style={{
@@ -478,8 +485,9 @@ export default function CreateParticipantScreen() {
                 </View>
               )}
             </View>
-          </ScrollView>
-        </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
   );
 }

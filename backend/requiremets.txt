@@ -7,4 +7,5 @@ sqlalchemy
 python-dotenv
 uvicorn
 passlib[bcrypt]
+argon2_cffi
 python-jose[cryptography]

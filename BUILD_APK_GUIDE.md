@@ -55,7 +55,7 @@ Before building, update your frontend to point to your hosted backend:
 
 1. Create a `.env` file in the `frontend` directory:
 ```env
-EXPO_PUBLIC_API_URL=https://your-backend-url.com
+EXPO_PUBLIC_API_URL=http://api.vyzify.com
 ```
 
 2. Or update `frontend/services/apiConfig.ts` to use your production backend URL.

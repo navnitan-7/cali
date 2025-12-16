@@ -22,25 +22,25 @@ MAX_ATTEMPTS_PER_EVENT = {
 router = APIRouter(prefix="/activity", tags=["activity"])
 
 @router.post("/get_metrics/event_id/{event_id}")
-async def get_metrics(event_id: int, participant_id: int, current_user: dict = Depends(get_current_user)):
-    # Get fields from constants based on event_id
-    if event_id not in ACTIVITY_FIELDS_BY_EVENT:
-        raise HTTPException(status_code=400, detail="Invalid event id")
+async def get_metrics(event_id: int, participant_id: int, event_type: int, current_user: dict = Depends(get_current_user)):
+    # Get fields from constants based on event_type
+    if event_type not in ACTIVITY_FIELDS_BY_EVENT:
+        raise HTTPException(status_code=400, detail="Invalid event type")
     
-    select_columns = ACTIVITY_FIELDS_BY_EVENT[event_id]
+    select_columns = ACTIVITY_FIELDS_BY_EVENT[event_type]
     return db.read(f"SELECT {', '.join(select_columns)} FROM cali_db.activity WHERE event_id = :event_id AND participant_id = :participant_id", {"event_id": event_id, "participant_id": participant_id})
 
 @router.post("/add_activity/")
 async def add_activity(activity: Activity, current_user: dict = Depends(get_current_user)):
-    # Validate event_id exists in constants
+    # Validate event_type exists in constants
     print(activity.event_id)
-    if activity.event_id not in ACTIVITY_FIELDS_BY_EVENT:
-        raise HTTPException(status_code=400, detail="Invalid event id")
+    if activity.event_type not in ACTIVITY_FIELDS_BY_EVENT:
+        raise HTTPException(status_code=400, detail="Invalid event type")
     
-    # Get required fields for this event_id
-    required_fields = set(ACTIVITY_FIELDS_BY_EVENT[activity.event_id])
+    # Get required fields for this event_type
+    required_fields = set(ACTIVITY_FIELDS_BY_EVENT[activity.event_type])
     
-    # Validate that required fields are provided based on event_id
+    # Validate that required fields are provided based on event_type
     # attempt_id is always required in the model, so no need to check
     
     if "time" in required_fields and activity.time is None:
@@ -63,18 +63,18 @@ async def update_activity(activity: Activity, current_user: dict = Depends(get_c
     # Validate event_id exists in constants
     print(activity.event_id)
     print(activity.attempt_id)
-    print(MAX_ATTEMPTS_PER_EVENT[activity.event_id])
+    print(MAX_ATTEMPTS_PER_EVENT[activity.event_type])
     print(activity.time)
-    if activity.event_id not in ACTIVITY_FIELDS_BY_EVENT:
+    if activity.event_type not in ACTIVITY_FIELDS_BY_EVENT:
         raise HTTPException(status_code=400, detail="Invalid event id")
     
-    # Get required fields for this event_id and check if the attempt_id is valid
-    required_fields = set(ACTIVITY_FIELDS_BY_EVENT[activity.event_id])
-    max_attempts = MAX_ATTEMPTS_PER_EVENT[activity.event_id]
+    # Get required fields for this event_type and check if the attempt_id is valid
+    required_fields = set(ACTIVITY_FIELDS_BY_EVENT[activity.event_type])
+    max_attempts = MAX_ATTEMPTS_PER_EVENT[activity.event_type]
     if not (1 <= activity.attempt_id <= max_attempts):
         raise HTTPException(status_code=400, detail="Invalid attempt id")
     
-    # Validate that required fields are provided based on event_id
+    # Validate that required fields are provided based on event_type
     if "time" in required_fields and activity.time is None:
         raise HTTPException(status_code=400, detail="time is required for this event")
     

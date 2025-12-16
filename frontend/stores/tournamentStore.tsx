@@ -171,26 +171,15 @@ const asyncStorage = {
 // Default mock tournaments
 const getDefaultTournaments = (): Tournament[] => {
   const now = new Date();
-  const futureDate1 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const futureDate2 = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+  // Jan 9-10, 2025 (using Jan 9 as the date)
+  const tournamentDate = new Date('2025-01-09');
 
   return [
     {
       id: '1',
-      name: 'Street Fitness Championship 2025',
-      date: futureDate1.toISOString().split('T')[0],
-      description: 'Annual street fitness competition',
-      participants: [],
-      events: [],
-      status: 'upcoming',
-      createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    },
-    {
-      id: '2',
-      name: 'Calisthenics Masters',
-      date: futureDate2.toISOString().split('T')[0],
-      description: 'Elite calisthenics tournament',
+      name: 'Ground Zero Limitless',
+      date: tournamentDate.toISOString().split('T')[0],
+      description: 'Jan 9-10',
       participants: [],
       events: [],
       status: 'upcoming',

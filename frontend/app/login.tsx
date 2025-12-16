@@ -9,6 +9,7 @@ import { getFontFamily } from '../utils/fonts';
 import { useAuthStore } from '../stores/authStore';
 import { useEventTypesStore } from '../stores/eventTypesStore';
 import Button from '../components/ui/Button';
+import { API_BASE_URL } from '../services/apiConfig';
 
 export default function LoginScreen() {
   const theme = useTheme();
@@ -27,6 +28,9 @@ export default function LoginScreen() {
       return;
     }
     
+    console.log('[Login] Attempting login...');
+    console.log('[Login] API URL:', API_BASE_URL);
+    
     const success = await login(username.trim(), password);
     
     if (success) {
@@ -36,7 +40,25 @@ export default function LoginScreen() {
       });
       router.replace('/(tabs)/tournaments');
     } else {
-      Alert.alert('Login Failed', error || 'Invalid username or password');
+      // Show detailed error message
+      const errorMessage = error || 'Invalid username or password';
+      console.error('[Login] Login failed:', errorMessage);
+      
+      // Check if it's a network error
+      const isNetworkError = errorMessage.toLowerCase().includes('network') || 
+                            errorMessage.toLowerCase().includes('connect') ||
+                            errorMessage.toLowerCase().includes('timeout');
+      
+      Alert.alert(
+        'Login Failed', 
+        isNetworkError 
+          ? `${errorMessage}\n\nCheck console logs for details.\n\nAPI URL: ${API_BASE_URL}`
+          : errorMessage,
+        [
+          { text: 'OK', style: 'default' },
+          { text: 'Debug Info', onPress: () => router.push('/debug') }
+        ]
+      );
     }
   };
 

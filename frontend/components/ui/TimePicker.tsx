@@ -16,38 +16,32 @@ export default function TimePicker({ value, onChange, isDark, accentColor, preci
   const useMicroseconds = precision === 'microseconds';
   
   // Parse time string to minutes, seconds, milliseconds, microseconds
+  // Supports formats: MM:SS, MM:SS:mmm, MM:SS:mmm:uuu
   const parseTime = (timeStr: string): { minutes: number; seconds: number; milliseconds: number; microseconds: number } => {
-    const parts = timeStr.split(':').map(Number);
+    const parts = timeStr.split(':');
     if (parts.length === 2) {
       // MM:SS format
-      return { minutes: parts[0] || 0, seconds: parts[1] || 0, milliseconds: 0, microseconds: 0 };
-    } else if (parts.length === 3) {
-      // Check if third part is hours (0-23) or milliseconds (0-999)
-      if (parts[0] < 24 && parts[1] < 60 && parts[2] < 60) {
-        // HH:MM:SS format - convert to MM:SS:MS
-        const totalSeconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-        return { 
-          minutes: Math.floor(totalSeconds / 60), 
-          seconds: totalSeconds % 60, 
-          milliseconds: 0,
-          microseconds: 0
-        };
-      } else {
-        // MM:SS:MS format
-        return { 
-          minutes: parts[0] || 0, 
-          seconds: parts[1] || 0, 
-          milliseconds: parts[2] || 0,
-          microseconds: 0
-        };
-      }
-    } else if (parts.length === 4) {
-      // MM:SS:MS:US format
       return { 
-        minutes: parts[0] || 0, 
-        seconds: parts[1] || 0, 
-        milliseconds: parts[2] || 0,
-        microseconds: parts[3] || 0
+        minutes: parseInt(parts[0], 10) || 0, 
+        seconds: parseInt(parts[1], 10) || 0, 
+        milliseconds: 0, 
+        microseconds: 0 
+      };
+    } else if (parts.length === 3) {
+      // MM:SS:mmm format (minutes:seconds:milliseconds)
+      return { 
+        minutes: parseInt(parts[0], 10) || 0, 
+        seconds: parseInt(parts[1], 10) || 0, 
+        milliseconds: parseInt(parts[2], 10) || 0,
+        microseconds: 0
+      };
+    } else if (parts.length === 4) {
+      // MM:SS:mmm:uuu format
+      return { 
+        minutes: parseInt(parts[0], 10) || 0, 
+        seconds: parseInt(parts[1], 10) || 0, 
+        milliseconds: parseInt(parts[2], 10) || 0,
+        microseconds: parseInt(parts[3], 10) || 0
       };
     }
     return { minutes: 0, seconds: 0, milliseconds: 0, microseconds: 0 };

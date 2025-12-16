@@ -97,7 +97,9 @@ function TournamentCard({
                 color: colors['text-secondary'],
                 marginLeft: 4,
               }}>
-                {formatDate(tournament.date)}
+                {tournament.description && tournament.description.match(/Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/) 
+                  ? tournament.description 
+                  : formatDate(tournament.date)}
               </Text>
             </View>
             
