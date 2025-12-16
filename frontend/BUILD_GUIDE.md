@@ -148,12 +148,12 @@ eas build --platform all --profile preview
 
 ## Environment Variables
 
-The app is configured to use the backend at `http://54.90.211.193:8000` by default.
+The app is configured to use the backend at `http://api.vyzify.com` by default.
 
 To override, create a `.env` file in the `frontend` directory:
 
 ```env
-EXPO_PUBLIC_API_URL=http://54.90.211.193:8000
+EXPO_PUBLIC_API_URL=http://api.vyzify.com
 ```
 
 ## Build Status

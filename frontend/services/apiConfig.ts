@@ -38,7 +38,7 @@ const getApiBaseUrl = () => {
   
   // Default based on platform (fallback if no env var)
   // Default to production backend
-  return 'http://54.90.211.193:8000';
+  return 'https://api.vyzify.com';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -100,7 +100,39 @@ class ApiClient {
   private setupInterceptors() {
     this.client.interceptors.request.use(
       async (config: InternalAxiosRequestConfig) => {
-        console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
+        const method = config.method?.toUpperCase() || 'UNKNOWN';
+        const url = config.url || 'unknown';
+        
+        // Log basic request info
+        console.log(`[API Request] ${method} ${url}`);
+        
+        // Log request payload for POST, PUT, PATCH requests
+        if (['POST', 'PUT', 'PATCH'].includes(method) && config.data) {
+          // Sanitize sensitive data (passwords, tokens, etc.)
+          const sanitizedData = this.sanitizeData(config.data);
+          console.log(`[API Request] Payload:`, JSON.stringify(sanitizedData, null, 2));
+        }
+        
+        // Log query parameters for GET requests
+        if (method === 'GET' && config.params) {
+          console.log(`[API Request] Query Params:`, JSON.stringify(config.params, null, 2));
+        }
+        
+        // Log headers (excluding sensitive ones)
+        if (config.headers) {
+          const headersToLog: Record<string, string> = {};
+          Object.keys(config.headers).forEach(key => {
+            const lowerKey = key.toLowerCase();
+            // Don't log sensitive headers
+            if (!lowerKey.includes('authorization') && !lowerKey.includes('token')) {
+              headersToLog[key] = config.headers[key] as string;
+            }
+          });
+          if (Object.keys(headersToLog).length > 0) {
+            console.log(`[API Request] Headers:`, JSON.stringify(headersToLog, null, 2));
+          }
+        }
+        
         try {
           const token = await storage.getItem('auth_token');
           if (token && config.headers) {
@@ -120,11 +152,58 @@ class ApiClient {
 
     this.client.interceptors.response.use(
       (response) => {
-        console.log(`[API Response] ${response.status} ${response.config.url}`);
+        const status = response.status;
+        const url = response.config.url || 'unknown';
+        const method = response.config.method?.toUpperCase() || 'UNKNOWN';
+        
+        // Log basic response info
+        console.log(`[API Response] ${status} ${method} ${url}`);
+        
+        // Log response data/payload
+        if (response.data) {
+          // Sanitize sensitive data in response
+          const sanitizedData = this.sanitizeData(response.data);
+          console.log(`[API Response] Payload:`, JSON.stringify(sanitizedData, null, 2));
+        }
+        
+        // Log response headers (excluding sensitive ones)
+        if (response.headers) {
+          const headersToLog: Record<string, string> = {};
+          Object.keys(response.headers).forEach(key => {
+            const lowerKey = key.toLowerCase();
+            // Don't log sensitive headers
+            if (!lowerKey.includes('authorization') && !lowerKey.includes('token') && !lowerKey.includes('cookie')) {
+              headersToLog[key] = response.headers[key] as string;
+            }
+          });
+          if (Object.keys(headersToLog).length > 0) {
+            console.log(`[API Response] Headers:`, JSON.stringify(headersToLog, null, 2));
+          }
+        }
+        
         return response;
       },
       async (error) => {
         const isNetworkError = error.message === 'Network Error' || !error.response;
+        const method = error.config?.method?.toUpperCase() || 'UNKNOWN';
+        const url = error.config?.url || 'unknown';
+        const status = error.response?.status;
+        
+        // Log error request details
+        console.error(`[API Response] Error ${status || 'NETWORK'} ${method} ${url}`);
+        
+        // Log error response payload if available
+        if (error.response?.data) {
+          const sanitizedErrorData = this.sanitizeData(error.response.data);
+          console.error(`[API Response] Error Payload:`, JSON.stringify(sanitizedErrorData, null, 2));
+        }
+        
+        // Log original request payload if it was a POST/PUT/PATCH
+        if (['POST', 'PUT', 'PATCH'].includes(method) && error.config?.data) {
+          const sanitizedRequestData = this.sanitizeData(error.config.data);
+          console.error(`[API Response] Original Request Payload:`, JSON.stringify(sanitizedRequestData, null, 2));
+        }
+        
         const errorDetails = {
           url: error.config?.url,
           baseURL: error.config?.baseURL,
@@ -140,7 +219,7 @@ class ApiClient {
         const isAuthCheck401 = isAuthCheck && error.response?.status === 401;
         
         if (!isAuthCheck401) {
-          console.error('[API Response] Error:', errorDetails);
+          console.error('[API Response] Error Details:', errorDetails);
         }
         
         // Provide helpful error message for network errors
@@ -223,6 +302,41 @@ class ApiClient {
 
   public setBaseURL(url: string) {
     this.client.defaults.baseURL = url;
+  }
+
+  /**
+   * Sanitize sensitive data from logs (passwords, tokens, etc.)
+   */
+  private sanitizeData(data: any): any {
+    if (data === null || data === undefined) {
+      return data;
+    }
+
+    if (typeof data !== 'object') {
+      return data;
+    }
+
+    if (Array.isArray(data)) {
+      return data.map(item => this.sanitizeData(item));
+    }
+
+    const sanitized: Record<string, any> = {};
+    const sensitiveKeys = ['password', 'token', 'authorization', 'secret', 'api_key', 'apikey', 'access_token', 'refresh_token'];
+    
+    for (const key in data) {
+      const lowerKey = key.toLowerCase();
+      const isSensitive = sensitiveKeys.some(sensitive => lowerKey.includes(sensitive));
+      
+      if (isSensitive) {
+        sanitized[key] = '***REDACTED***';
+      } else if (typeof data[key] === 'object' && data[key] !== null) {
+        sanitized[key] = this.sanitizeData(data[key]);
+      } else {
+        sanitized[key] = data[key];
+      }
+    }
+    
+    return sanitized;
   }
 }
 

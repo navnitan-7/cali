@@ -26,6 +26,7 @@ class Activity(BaseModel):
     time: float | None = None
     is_success: bool | None = None
     is_deleted: bool | None = None
+    event_type: int | None = None
 
 class UserRegister(BaseModel):
     email: str

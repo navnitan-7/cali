@@ -10,6 +10,7 @@ export interface ActivityMetric {
 
 export interface AddActivityData {
   event_id: number;
+  event_type: number;
   participant_id: number;
   attempt_id: number;
   weight?: number | null;
@@ -21,12 +22,12 @@ export interface AddActivityData {
 }
 
 class ActivityService {
-  async getMetrics(eventId: number, participantId: number): Promise<ActivityMetric[]> {
+  async getMetrics(eventId: number, participantId: number, eventType: number): Promise<ActivityMetric[]> {
     const response = await apiClient.post<ActivityMetric[]>(
       `/activity/get_metrics/event_id/${eventId}`,
       null,
       {
-        params: { participant_id: participantId },
+        params: { participant_id: participantId, event_type: eventType },
       }
     );
     return response.data;

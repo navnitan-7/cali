@@ -226,11 +226,11 @@ export const useActivityApi = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getMetrics = useCallback(async (eventId: number, participantId: number) => {
+  const getMetrics = useCallback(async (eventId: number, participantId: number, eventType: number) => {
     try {
       setLoading(true);
       setError(null);
-      const metrics = await activityService.getMetrics(eventId, participantId);
+      const metrics = await activityService.getMetrics(eventId, participantId, eventType);
       return metrics;
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || 'Failed to fetch metrics';

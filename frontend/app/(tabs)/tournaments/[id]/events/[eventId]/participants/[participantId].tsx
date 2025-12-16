@@ -99,8 +99,8 @@ export default function EventParticipantDetailScreen() {
       const fetchMetrics = async () => {
         try {
           setIsLoadingMetrics(true);
-          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the API
-          const metrics = await getMetrics(eventTypeId, parseInt(participantId));
+          // Use the actual event database ID from URL params and event type for validation
+          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId), eventTypeId!);
           setMetricsData(metrics || []);
         } catch (error) {
           console.error('Error fetching metrics:', error);
@@ -311,8 +311,10 @@ export default function EventParticipantDetailScreen() {
       // Prepare activity data for backend with all required fields
       // Use validated values for required fields, and formValues for optional fields
         const activityData: AddActivityData = {
-          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the backend
-          event_id: eventTypeId,
+          // Use the actual event database ID from URL params
+          event_id: parseInt(eventId),
+          // Use event type ID (1, 2, 3, 4) for validation
+          event_type: eventTypeId!,
           participant_id: parseInt(participantId),
           attempt_id: requiredFields.includes('attempt_id')
             ? (typeof validatedValues['attempt_id'] === 'number' 
@@ -1534,9 +1536,11 @@ export default function EventParticipantDetailScreen() {
             : getNextAttemptId);
 
       // Prepare activity data for backend
-      // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the backend
+      // Use the actual event database ID from URL params
       const activityData: AddActivityData = {
-        event_id: eventTypeId,
+        event_id: parseInt(eventId),
+        // Use event type ID (1, 2, 3, 4) for validation
+        event_type: eventTypeId!,
         participant_id: parseInt(participantId),
         attempt_id: attemptId,
         // Use form value for type_of_activity (selected from the list)
@@ -1589,10 +1593,10 @@ export default function EventParticipantDetailScreen() {
       setShowMetricsModal(false);
       
       // Refresh metrics data after update or add to ensure UI is in sync (updates table without full reload)
-      if (eventTypeId && participantId) {
+      if (eventId && participantId) {
         try {
-          // Use eventTypeId (1, 2, 3, 4) instead of eventId (database ID) for the API
-          const metrics = await getMetrics(eventTypeId, parseInt(participantId));
+          // Use the actual event database ID from URL params and event type for validation
+          const metrics = await getMetrics(parseInt(eventId), parseInt(participantId), eventTypeId!);
           setMetricsData(metrics || []);
         } catch (error) {
           console.error('Error refreshing metrics:', error);

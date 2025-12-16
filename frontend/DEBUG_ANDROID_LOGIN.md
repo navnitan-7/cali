@@ -15,7 +15,7 @@ I've made the following changes to fix Android login issues:
 When login fails, check the console/logcat for these messages:
 
 ```
-[API Config] Using API Base URL: http://54.90.211.193:8000 (Platform: android)
+[API Config] Using API Base URL: http://api.vyzify.com (Platform: android)
 [Login] Attempting login...
 [AuthService] Attempting login for: <username>
 [API Request] POST /auth/login
@@ -46,14 +46,14 @@ adb logcat | grep -E "(API|Login|Auth|Network)"
 **Solutions:**
 1. **Check Backend is Running**
    ```bash
-   curl http://54.90.211.193:8000/
+   curl http://api.vyzify.com/
    # Should return: {"message":"Hello, World!"}
    ```
 
 2. **Check API URL in App**
    - Open debug screen (`/debug`)
    - Verify API Base URL is correct
-   - Should be: `http://54.90.211.193:8000`
+   - Should be: `http://api.vyzify.com`
 
 3. **Check Android Network Security**
    - Ensure `usesCleartextTraffic: true` is in `app.json` (already added)
@@ -61,7 +61,7 @@ adb logcat | grep -E "(API|Login|Auth|Network)"
 
 4. **Check Device Internet**
    - Ensure device has internet connection
-   - Try opening `http://54.90.211.193:8000/` in device browser
+   - Try opening `http://api.vyzify.com/` in device browser
 
 ### Issue 2: 401 Unauthorized
 
@@ -102,10 +102,10 @@ adb logcat | grep -E "(API|Login|Auth|Network)"
 
 ```bash
 # From your computer
-curl http://54.90.211.193:8000/
+curl http://api.vyzify.com/
 
 # From Android device browser
-# Open Chrome and navigate to: http://54.90.211.193:8000/
+# Open Chrome and navigate to: http://api.vyzify.com/
 ```
 
 ### Step 2: Check App Configuration
@@ -113,7 +113,7 @@ curl http://54.90.211.193:8000/
 1. Open the app
 2. Navigate to Debug screen (`/debug`)
 3. Check "Network Configuration" section
-4. Verify API Base URL is `http://54.90.211.193:8000`
+4. Verify API Base URL is `http://api.vyzify.com`
 
 ### Step 3: Test Connection
 
@@ -192,7 +192,7 @@ If login still fails after these steps:
 
 3. **Test with curl:**
    ```bash
-   curl -X POST http://54.90.211.193:8000/auth/login \
+   curl -X POST http://api.vyzify.com/auth/login \
      -H "Content-Type: application/json" \
      -d '{"name":"your_username","password":"your_password"}'
    ```
@@ -207,10 +207,10 @@ If login still fails after these steps:
 
 ```bash
 # Test backend health
-curl http://54.90.211.193:8000/
+curl http://api.vyzify.com/
 
 # Test login endpoint (will fail with 401, but confirms endpoint exists)
-curl -X POST http://54.90.211.193:8000/auth/login \
+curl -X POST http://api.vyzify.com/auth/login \
   -H "Content-Type: application/json" \
   -d '{"name":"test","password":"test"}'
 
