@@ -63,7 +63,7 @@ async def update_activity(activity: Activity, current_user: dict = Depends(get_c
     # Validate event_id exists in constants
     print(activity.event_id)
     print(activity.attempt_id)
-    print(MAX_ATTEMPTS_PER_EVENT[activity.event_id])
+    print(MAX_ATTEMPTS_PER_EVENT[activity.event_type])
     print(activity.time)
     if activity.event_type not in ACTIVITY_FIELDS_BY_EVENT:
         raise HTTPException(status_code=400, detail="Invalid event id")

@@ -23,7 +23,7 @@ class Activity(BaseModel):
     weight: float | None = None
     type_of_activity: str
     reps: int | None = None
-    time: float | None = None
+    time: int | None = None
     is_success: bool | None = None
     is_deleted: bool | None = None
     event_type: int | None = None
