@@ -101,7 +101,7 @@ interface TournamentStore {
   // Participant management
   addParticipant: (tournamentId: string, participant: Omit<Participant, 'id' | 'createdAt' | 'updatedAt' | 'division'>, eventIds?: string[]) => Promise<string>;
   updateParticipant: (tournamentId: string, participantId: string, updates: Partial<Omit<Participant, 'id' | 'createdAt' | 'updatedAt' | 'division'>> & { eventIds?: string[] }) => Promise<void>;
-  deleteParticipant: (tournamentId: string, participantId: string) => void;
+  deleteParticipant: (tournamentId: string, participantId: string) => Promise<void>;
   getParticipant: (tournamentId: string, participantId: string) => Participant | undefined;
   
   // Event management
@@ -700,27 +700,36 @@ export const useTournamentStore = create<TournamentStore>()(
         }
       },
       
-      deleteParticipant: (tournamentId, participantId) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((tournament) =>
-            tournament.id === tournamentId
-              ? {
-                  ...tournament,
-                  participants: tournament.participants.filter((p) => p.id !== participantId),
-                  // Also remove from all events in this tournament
-                  events: tournament.events.map((event) => {
-                    const { [participantId]: removed, ...restParticipantData } = event.participantData || {};
-                    return {
-                      ...event,
-                      participantIds: event.participantIds.filter((pid) => pid !== participantId),
-                      participantData: restParticipantData,
-                    };
-                  }),
-                  updatedAt: new Date().toISOString(),
-                }
-              : tournament
-          ),
-        }));
+      deleteParticipant: async (tournamentId, participantId) => {
+        try {
+          // Call backend API to delete participant
+          await participantService.deleteParticipant(parseInt(participantId));
+          
+          // Update local state after successful backend deletion
+          set((state) => ({
+            tournaments: state.tournaments.map((tournament) =>
+              tournament.id === tournamentId
+                ? {
+                    ...tournament,
+                    participants: tournament.participants.filter((p) => p.id !== participantId),
+                    // Also remove from all events in this tournament
+                    events: tournament.events.map((event) => {
+                      const { [participantId]: removed, ...restParticipantData } = event.participantData || {};
+                      return {
+                        ...event,
+                        participantIds: event.participantIds.filter((pid) => pid !== participantId),
+                        participantData: restParticipantData,
+                      };
+                    }),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : tournament
+            ),
+          }));
+        } catch (error) {
+          console.error('Error deleting participant:', error);
+          throw error;
+        }
       },
       
       getParticipant: (tournamentId, participantId) => {

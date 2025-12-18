@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -11,6 +11,7 @@ import { eventService } from '../../../../../services';
 import { divisionOptions } from '../../../../../schemas/eventModal';
 import Button from '../../../../../components/ui/Button';
 import ConfirmDialog from '../../../../../components/ui/ConfirmDialog';
+import Toast from '../../../../../components/ui/Toast';
 
 export default function ParticipantDetailScreen() {
   const { id: tournamentId, participantId } = useLocalSearchParams<{ id: string; participantId: string }>();
@@ -22,6 +23,9 @@ export default function ParticipantDetailScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
   const participant = tournamentId && participantId ? getParticipant(tournamentId, participantId) : undefined;
@@ -140,9 +144,22 @@ export default function ParticipantDetailScreen() {
     setState(participant.state || '');
   };
 
-  const handleDelete = () => {
-    deleteParticipant(tournamentId!, participantId!);
-    router.back();
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      await deleteParticipant(tournamentId!, participantId!);
+      setDeleteConfirmVisible(false);
+      router.back();
+    } catch (error: any) {
+      console.error('Error deleting participant:', error);
+      setDeleteConfirmVisible(false);
+      // Extract error message from backend response
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete participant. Please try again.';
+      setToastMessage(errorMessage);
+      setToastVisible(true);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleEdit = () => {
@@ -841,6 +858,16 @@ export default function ParticipantDetailScreen() {
           variant="danger"
           onConfirm={handleDelete}
           onCancel={() => setDeleteConfirmVisible(false)}
+          loading={isDeleting}
+        />
+
+        <Toast
+          visible={toastVisible}
+          message={toastMessage}
+          onHide={() => setToastVisible(false)}
+          isDark={isDark}
+          variant="error"
+          duration={4000}
         />
       </View>
     </SafeAreaView>

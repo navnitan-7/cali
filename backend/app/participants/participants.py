@@ -93,3 +93,40 @@ async def update_participant(id: int, participant: Participant, current_user: di
         
         # Transaction will auto-commit on successful exit from context manager
         return {"message": "Participant updated successfully"}
+
+@router.delete("/delete/{id}")
+async def delete_participant(id: int, current_user: dict = Depends(get_current_user)):
+    # Use a connection with explicit transaction control
+    with db.engine.begin() as conn:
+        # Check if participant has any activity records
+        activity_check = conn.execute(
+            text("SELECT COUNT(*) FROM cali_db.activity WHERE participant_id = :participant_id"),
+            {"participant_id": id}
+        ).fetchone()
+        
+        if activity_check[0] > 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete participant with recorded activity. Please remove activity records first."
+            )
+        
+        # Delete participant-event associations
+        conn.execute(
+            text("DELETE FROM cali_db.participants_events WHERE participant_id = :participant_id"),
+            {"participant_id": id}
+        )
+        
+        # Delete the participant
+        result = conn.execute(
+            text("DELETE FROM cali_db.participants WHERE id = :id"),
+            {"id": id}
+        )
+        
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Participant not found"
+            )
+        
+        # Transaction will auto-commit on successful exit from context manager
+        return {"message": "Participant deleted successfully"}

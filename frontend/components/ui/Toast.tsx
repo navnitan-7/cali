@@ -4,16 +4,28 @@ import { useColors } from '../../utils/colors';
 import { getFontFamily } from '../../utils/fonts';
 import { Ionicons } from '@expo/vector-icons';
 
+type ToastVariant = 'success' | 'error' | 'warning' | 'info';
+
 interface ToastProps {
   visible: boolean;
   message: string;
   onHide: () => void;
   isDark: boolean;
+  variant?: ToastVariant;
+  duration?: number;
 }
 
-export default function Toast({ visible, message, onHide, isDark }: ToastProps) {
+const variantConfig: Record<ToastVariant, { icon: keyof typeof Ionicons.glyphMap; colorKey: string; fallbackColor: string }> = {
+  success: { icon: 'checkmark-circle', colorKey: 'text-success', fallbackColor: '#10B981' },
+  error: { icon: 'close-circle', colorKey: 'text-danger', fallbackColor: '#EF4444' },
+  warning: { icon: 'warning', colorKey: 'text-warning', fallbackColor: '#F59E0B' },
+  info: { icon: 'information-circle', colorKey: 'text-secondary', fallbackColor: '#3B82F6' },
+};
+
+export default function Toast({ visible, message, onHide, isDark, variant = 'success', duration = 3000 }: ToastProps) {
   const colors = useColors(isDark);
   const slideAnim = useRef(new Animated.Value(-100)).current;
+  const config = variantConfig[variant];
 
   useEffect(() => {
     if (visible) {
@@ -25,7 +37,7 @@ export default function Toast({ visible, message, onHide, isDark }: ToastProps) 
         friction: 7,
       }).start();
 
-      // Auto hide after 2 seconds
+      // Auto hide after duration
       const timer = setTimeout(() => {
         Animated.timing(slideAnim, {
           toValue: -100,
@@ -34,13 +46,13 @@ export default function Toast({ visible, message, onHide, isDark }: ToastProps) 
         }).start(() => {
           onHide();
         });
-      }, 2000);
+      }, duration);
 
       return () => clearTimeout(timer);
     } else {
       slideAnim.setValue(-100);
     }
-  }, [visible, slideAnim, onHide]);
+  }, [visible, slideAnim, onHide, duration]);
 
   if (!visible) return null;
 
@@ -56,8 +68,8 @@ export default function Toast({ visible, message, onHide, isDark }: ToastProps) 
       ]}
     >
       <View style={styles.content}>
-        <Ionicons name="checkmark-circle" size={20} color={colors['text-success'] || '#10B981'} />
-        <Text style={[styles.message, { color: colors['text-primary'] }]}>
+        <Ionicons name={config.icon} size={20} color={(colors as any)[config.colorKey] || config.fallbackColor} />
+        <Text style={[styles.message, { color: colors['text-primary'], flex: 1 }]}>
           {message}
         </Text>
       </View>
