@@ -60,6 +60,11 @@ class ParticipantService {
     const response = await apiClient.put(`/participants/update/${id}`, data);
     return response.data;
   }
+
+  async deleteParticipant(id: number): Promise<{ message: string }> {
+    const response = await apiClient.delete(`/participants/delete/${id}`);
+    return response.data;
+  }
 }
 
 export const participantService = new ParticipantService();
