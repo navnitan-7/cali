@@ -1,0 +1,81 @@
+# Docker Compose for running vLLM with vision models
+# Use this for self-hosted inference instead of cloud APIs
+
+version: '3.8'
+
+services:
+  # vLLM server with LLaVA vision model
+  vllm-llava:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-street-lifting
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    command: >
+      --model llava-hf/llava-1.5-7b-hf
+      --host 0.0.0.0
+      --port 8000
+      --max-model-len 4096
+      --gpu-memory-utilization 0.9
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+
+  # Alternative: Qwen-VL for better video understanding
+  vllm-qwen:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-qwen-street-lifting
+    runtime: nvidia
+    profiles:
+      - qwen
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8001:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    command: >
+      --model Qwen/Qwen2-VL-7B-Instruct
+      --host 0.0.0.0
+      --port 8000
+      --max-model-len 4096
+      --gpu-memory-utilization 0.9
+    restart: unless-stopped
+
+networks:
+  default:
+    name: street-lifting-network
+
+# Usage:
+# 1. For LLaVA:
+#    docker-compose -f docker-compose.vllm.yml up -d vllm-llava
+#
+# 2. For Qwen-VL:
+#    docker-compose -f docker-compose.vllm.yml --profile qwen up -d vllm-qwen
+#
+# 3. Configure environment:
+#    export VLM_BACKEND=vllm_llava
+#    export VLLM_BASE_URL=http://localhost:8000
+

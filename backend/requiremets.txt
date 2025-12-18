@@ -9,3 +9,13 @@ uvicorn
 passlib[bcrypt]
 argon2_cffi
 python-jose[cryptography]
+
+# Video Judge - VLM Integration
+httpx>=0.25.0
+opencv-python>=4.8.0
+python-multipart>=0.0.6
+
+# Optional: For local vLLM serving
+# vllm>=0.2.0
+# torch>=2.0.0
+# transformers>=4.35.0
