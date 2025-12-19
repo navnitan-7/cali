@@ -10,9 +10,10 @@ interface TabSwitchProps {
   onTabChange: (tab: string) => void;
   style?: 'underline' | 'rounded' | 'scrollable';
   accentColor?: string; // Tournament accent color
+  counts?: (number | undefined)[]; // Optional counts for each tab
 }
 
-export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'underline', accentColor }: TabSwitchProps) {
+export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'underline', accentColor, counts }: TabSwitchProps) {
   const theme = useTheme();
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
@@ -35,18 +36,22 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
           paddingBottom: 8,
         }}
       >
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            onPress={() => onTabChange(tab)}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              marginRight: 8,
-              borderBottomWidth: 2,
-              borderBottomColor: activeTab === tab 
-                ? getActiveColor()
-                : 'transparent',
+        {tabs.map((tab, index) => {
+          const count = counts?.[index];
+          return (
+            <TouchableOpacity
+              key={tab}
+              onPress={() => onTabChange(tab)}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                marginRight: 8,
+                borderBottomWidth: 2,
+                borderBottomColor: activeTab === tab 
+                  ? getActiveColor()
+                  : 'transparent',
+              flexDirection: 'row',
+              alignItems: 'center',
             }}
           >
             <Text style={{
@@ -58,8 +63,33 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
             }}>
               {tab}
             </Text>
-          </TouchableOpacity>
-        ))}
+              {count !== undefined && count !== null && (
+                <View style={{
+                  minWidth: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  backgroundColor: activeTab === tab
+                    ? (accentColor || colors['bg-primary']) + (isDark ? '25' : '20')
+                    : colors['bg-secondary'],
+                  paddingHorizontal: 6,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginLeft: 6,
+                }}>
+                  <Text style={{
+                    fontSize: 11,
+                    fontFamily: getFontFamily('medium'),
+                    color: activeTab === tab
+                      ? (accentColor || colors['bg-primary'])
+                      : colors['text-secondary'],
+                  }}>
+                    {String(count)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     );
   }
@@ -73,32 +103,62 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
       paddingHorizontal: 16,
       marginBottom: 16,
     }}>
-      {tabs.map((tab) => (
-        <TouchableOpacity
-          key={tab}
-          onPress={() => onTabChange(tab)}
-          style={{
-            flex: 1,
-            paddingVertical: 12,
-            borderBottomWidth: 2,
-            borderBottomColor: activeTab === tab 
-              ? getActiveColor()
-              : 'transparent',
-            marginBottom: -1,
-          }}
-        >
-          <Text style={{
-            textAlign: 'center',
-            fontFamily: getFontFamily(activeTab === tab ? 'semibold' : 'regular'),
-            fontSize: 15,
-            color: activeTab === tab
-              ? colors['text-primary']
-              : colors['text-secondary']
-          }}>
-            {tab}
-          </Text>
-        </TouchableOpacity>
-      ))}
+      {tabs.map((tab, index) => {
+        const count = counts?.[index];
+        return (
+          <TouchableOpacity
+            key={tab}
+            onPress={() => onTabChange(tab)}
+            style={{
+              flex: 1,
+              paddingVertical: 12,
+              borderBottomWidth: 2,
+              borderBottomColor: activeTab === tab 
+                ? getActiveColor()
+                : 'transparent',
+              marginBottom: -1,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Text style={{
+              textAlign: 'center',
+              fontFamily: getFontFamily(activeTab === tab ? 'semibold' : 'regular'),
+              fontSize: 15,
+              color: activeTab === tab
+                ? colors['text-primary']
+                : colors['text-secondary']
+            }}>
+              {tab}
+            </Text>
+            {count !== undefined && count !== null && (
+              <View style={{
+                minWidth: 20,
+                height: 20,
+                borderRadius: 10,
+                backgroundColor: activeTab === tab
+                  ? (accentColor || colors['bg-primary']) + (isDark ? '25' : '20')
+                  : colors['bg-secondary'],
+                paddingHorizontal: 6,
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginLeft: 6,
+              }}>
+                <Text style={{
+                  fontSize: 11,
+                  fontFamily: getFontFamily('medium'),
+                  color: activeTab === tab
+                    ? (accentColor || colors['bg-primary'])
+                    : colors['text-secondary'],
+                }}>
+                  {String(count)}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }

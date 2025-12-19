@@ -13,6 +13,7 @@ import { eventSchema, eventDefaults } from '../../../../../schemas/eventModal';
 import { useTournamentStore } from '../../../../../stores/tournamentStore';
 import { useTournamentTheme } from '../../../../../hooks/useTournamentTheme';
 import { useEventTypesStore } from '../../../../../stores/eventTypesStore';
+import DateSelector from '../../../../../components/ui/DateSelector';
 
 type FormData = typeof eventDefaults;
 
@@ -24,6 +25,7 @@ export default function CreateEventScreen() {
   const insets = useSafeAreaInsets();
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const isEditMode = !!eventId;
   const { getTournament, getEvent, addEvent, updateEvent } = useTournamentStore();
   const { eventTypes } = useEventTypesStore();
@@ -50,8 +52,16 @@ export default function CreateEventScreen() {
   // Pre-fill form when editing
   React.useEffect(() => {
     if (isEditMode && existingEvent) {
+      // Format today's date in local timezone
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const todayStr = `${year}-${month}-${day}`;
+      
       reset({
         name: existingEvent.name,
+        date: existingEvent.date || todayStr,
         category: existingEvent.category,
       });
       setSelectedParticipantIds(Array.isArray(existingEvent.participantIds) ? existingEvent.participantIds : []);
@@ -161,6 +171,74 @@ export default function CreateEventScreen() {
         )}
       </View>
 
+      {/* Date */}
+      <View style={{ marginBottom: 24 }}>
+        <Text style={{
+          fontSize: 14,
+          fontFamily: getFontFamily('medium'),
+          color: accent ? getAccentWithOpacity(0.8) : colors['text-secondary'],
+          marginBottom: 8,
+        }}>
+          Date <Text style={{ color: colors['text-danger'] }}>*</Text>
+        </Text>
+        <Controller
+          control={control}
+          name="date"
+          render={({ field: { onChange, value } }) => (
+            <>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowDatePicker(true);
+                }}
+                style={{
+                  borderWidth: 1.5,
+                  borderColor: errors.date 
+                    ? colors['text-danger'] 
+                    : (value && accent ? accent : colors['border-default']),
+                  borderRadius: 10,
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  backgroundColor: value && accent
+                    ? getAccentWithOpacity(0.05)
+                    : colors['bg-card'],
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Text style={{
+                  color: value ? colors['text-primary'] : colors['text-secondary'],
+                  fontFamily: getFontFamily('regular'),
+                  fontSize: 16,
+                }}>
+                  {value ? new Date(value).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Select date'}
+                </Text>
+                <Ionicons name="calendar-outline" size={20} color={colors['text-secondary']} />
+              </TouchableOpacity>
+              <DateSelector
+                visible={showDatePicker}
+                date={value ? new Date(value) : new Date()}
+                onDateSelect={(dateStr) => {
+                  onChange(dateStr);
+                  setShowDatePicker(false);
+                }}
+                onClose={() => setShowDatePicker(false)}
+              />
+            </>
+          )}
+        />
+        {errors.date && (
+          <Text style={{
+            fontSize: 12,
+            fontFamily: getFontFamily('regular'),
+            color: colors['text-danger'],
+            marginTop: 4,
+          }}>
+            {errors.date.message}
+          </Text>
+        )}
+      </View>
+
       <View style={{ marginBottom: 24 }}>
         <Text style={{
           fontSize: 14,
@@ -226,7 +304,7 @@ export default function CreateEventScreen() {
 
 
   const isStepValid = () => {
-    return watchedValues.name && watchedValues.category;
+    return watchedValues.name && watchedValues.date && watchedValues.category;
   };
 
   const onSubmit = async (data: FormData) => {
@@ -240,9 +318,16 @@ export default function CreateEventScreen() {
           status: 'active',
         });
       } else if (tournamentId) {
+        // Get existing event to preserve divisions and metrics if editing, otherwise use defaults
+        const existing = existingEvent;
         await addEvent(tournamentId, {
-          ...data,
+          name: data.name,
+          date: data.date,
+          category: data.category,
+          divisions: existing?.divisions || ['Open'],
+          metrics: existing?.metrics || ['time', 'reps'],
           participantIds: selectedParticipantIds,
+          participantData: existing?.participantData || {},
           status: 'active',
         });
       }

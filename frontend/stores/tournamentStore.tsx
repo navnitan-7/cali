@@ -56,6 +56,7 @@ export interface EventParticipantData {
 interface Event {
   id: string;
   name: string;
+  date?: string;
   category: string;
   divisions: string[];
   metrics: string[];
@@ -610,7 +611,7 @@ export const useTournamentStore = create<TournamentStore>()(
           const result = await participantService.createParticipant({
             name: participant.name,
             age: participant.age || 0,
-            gender: participant.gender || participant.division || 'Open',
+            gender: participant.gender || 'Open',
             weight: participant.weight || 0,
             phone: participant.phone || '',
             country: participant.country || '',
@@ -670,7 +671,7 @@ export const useTournamentStore = create<TournamentStore>()(
           await participantService.updateParticipant(parseInt(participantId), {
             name: updates.name || currentParticipant.name,
             age: updates.age !== undefined ? updates.age : (currentParticipant.age || 0),
-            gender: updates.gender || updates.division || currentParticipant.gender || currentParticipant.division || 'Open',
+            gender: updates.gender || currentParticipant.gender || currentParticipant.division || 'Open',
             weight: updates.weight !== undefined ? (updates.weight || 0) : (currentParticipant.weight || 0),
             phone: updates.phone !== undefined ? updates.phone : (currentParticipant.phone || ''),
             country: updates.country !== undefined ? updates.country : (currentParticipant.country || ''),
@@ -827,7 +828,6 @@ export const useTournamentStore = create<TournamentStore>()(
           // Call backend API to update event
           await eventService.updateEvent(parseInt(eventId), {
             name: updates.name || currentEvent.name,
-            description: updates.description || currentEvent.description || '',
             event_type: eventTypeId,
           });
 

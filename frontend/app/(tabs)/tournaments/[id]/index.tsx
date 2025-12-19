@@ -292,7 +292,7 @@ export default function TournamentDetailScreen() {
               }}>
                 {participant.name}
               </Text>
-              {participant.weight && (
+              {participant.weight !== undefined && participant.weight !== null && (
                 <Text style={{
                   fontSize: 12,
                   fontFamily: getFontFamily('regular'),
@@ -323,34 +323,32 @@ export default function TournamentDetailScreen() {
           borderBottomColor: colors['border-default'],
           overflow: 'hidden',
         }}>
-          {/* Abstract accent background */}
+          {/* Abstract accent background - Level 1: Most prominent */}
           {accent && (
             <>
               <View style={{
                 position: 'absolute',
-                top: -40,
-                right: -40,
-                width: 120,
-                height: 120,
-                borderRadius: 60,
-                backgroundColor: accent.primary + '08',
-                opacity: 0.6,
+                top: -35,
+                right: -35,
+                width: 110,
+                height: 110,
+                borderRadius: 55,
+                backgroundColor: accent.primary + (isDark ? '12' : '18'),
               }} />
               <View style={{
                 position: 'absolute',
-                bottom: -30,
-                left: -30,
-                width: 80,
-                height: 80,
-                borderRadius: 40,
-                backgroundColor: accent.primary + '06',
-                opacity: 0.4,
+                bottom: -25,
+                left: -25,
+                width: 75,
+                height: 75,
+                borderRadius: 37.5,
+                backgroundColor: accent.primary + (isDark ? '10' : '15'),
               }} />
             </>
           )}
           
           <View style={{ flexDirection: 'row', alignItems: 'center', position: 'relative', zIndex: 1 }}>
-            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
+            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12, padding: 4 }}>
               <Ionicons name="arrow-back" size={22} color={colors['text-primary']} />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
@@ -358,6 +356,7 @@ export default function TournamentDetailScreen() {
                 fontSize: 18,
                 fontFamily: getFontFamily('semibold'),
                 color: colors['text-primary'],
+                letterSpacing: -0.3,
               }} numberOfLines={1}>
                 {tournament.name}
               </Text>
@@ -365,7 +364,7 @@ export default function TournamentDetailScreen() {
                 fontSize: 13,
                 fontFamily: getFontFamily('regular'),
                 color: colors['text-secondary'],
-                marginTop: 2,
+                marginTop: 3,
               }}>
                 {new Date(tournament.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
               </Text>
@@ -378,7 +377,7 @@ export default function TournamentDetailScreen() {
             </TouchableOpacity>
           </View>
           
-          {/* Accent border at bottom */}
+          {/* Accent border at bottom - Level 1 */}
           {accent && (
             <View style={{
               position: 'absolute',
@@ -386,7 +385,7 @@ export default function TournamentDetailScreen() {
               left: 0,
               right: 0,
               height: 2,
-              backgroundColor: accent.primary + '40',
+              backgroundColor: accent.primary + '35',
             }} />
           )}
         </View>
@@ -410,6 +409,7 @@ export default function TournamentDetailScreen() {
             onTabChange={setActiveTab}
             style="underline"
             accentColor={accent?.primary}
+            counts={[tournament.events.length, tournament.participants.length]}
           />
 
           {/* Subtle Accent Divider */}

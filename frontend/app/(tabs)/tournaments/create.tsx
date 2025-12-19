@@ -18,7 +18,15 @@ export default function CreateTournamentScreen() {
   const { addTournament } = useTournamentStore();
   
   const [name, setName] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // Format today's date in local timezone to avoid timezone offset issues
+  const getTodayLocal = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const [date, setDate] = useState(getTodayLocal());
   const [description, setDescription] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -156,8 +164,7 @@ export default function CreateTournamentScreen() {
               <DateSelector
                 visible={showDatePicker}
                 date={new Date(date)}
-                onDateChange={(selectedDate) => {
-                  const dateStr = selectedDate.toISOString().split('T')[0];
+                onDateSelect={(dateStr) => {
                   setDate(dateStr);
                   setShowDatePicker(false);
                 }}

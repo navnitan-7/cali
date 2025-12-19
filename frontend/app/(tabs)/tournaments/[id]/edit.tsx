@@ -177,8 +177,7 @@ export default function EditTournamentScreen() {
             <DateSelector
               visible={showDatePicker}
               date={new Date(date)}
-              onDateChange={(selectedDate) => {
-                const dateStr = selectedDate.toISOString().split('T')[0];
+              onDateSelect={(dateStr) => {
                 setDate(dateStr);
                 setShowDatePicker(false);
               }}

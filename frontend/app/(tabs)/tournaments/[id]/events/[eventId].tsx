@@ -357,155 +357,125 @@ export default function EventDetailScreen() {
       );
     }
 
-    const topThree = leaderboard.slice(0, 3);
-    const rest = leaderboard.slice(3);
+    const getRankBadgeStyle = (rank: number) => {
+      if (rank === 1) {
+        return {
+          backgroundColor: '#FFD700' + (isDark ? '25' : '20'),
+          borderColor: '#FFD700',
+        };
+      } else if (rank === 2) {
+        return {
+          backgroundColor: '#C0C0C0' + (isDark ? '25' : '20'),
+          borderColor: '#C0C0C0',
+        };
+      } else if (rank === 3) {
+        return {
+          backgroundColor: '#CD7F32' + (isDark ? '25' : '20'),
+          borderColor: '#CD7F32',
+        };
+      }
+      return {
+        backgroundColor: accent 
+          ? accent.primary + '15' 
+          : colors['bg-primary'] + '15',
+        borderColor: colors['border-default'],
+      };
+    };
+
+    const getRankTextColor = (rank: number) => {
+      if (rank === 1) return '#FFD700';
+      if (rank === 2) return '#C0C0C0';
+      if (rank === 3) return '#CD7F32';
+      return accent ? accent.primary : colors['bg-primary'];
+    };
 
     return (
       <View style={{ paddingBottom: insets.bottom + 100 }}>
-        {/* Minimal Top 3 */}
-        {topThree.length > 0 && (
-          <View style={{ marginBottom: 20 }}>
-            <Text style={{
-              fontSize: 14,
-              fontFamily: getFontFamily('semibold'),
-              color: colors['text-secondary'],
-              marginBottom: 12,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-            }}>
-              Top 3
-            </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-end' }}>
-              {topThree.map((participant, index) => {
-                const rank = index + 1;
-                const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
-                const heights = [60, 50, 40];
-                
-                return (
-                  <TouchableOpacity
-                    key={participant.id}
-                    onPress={() => router.push(`/(tabs)/tournaments/${tournamentId}/events/${eventId}/participants/${participant.id}` as any)}
-                    style={{ alignItems: 'center', flex: 1 }}
-                  >
-                    <View style={{
-                      width: 50,
-                      height: heights[index],
-                      borderRadius: 8,
-                      backgroundColor: accent 
-                        ? accent.primary + '10' 
-                        : colors['bg-primary'] + '15',
-                      borderWidth: 1.5,
-                      borderColor: medalColors[index],
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginBottom: 8,
-                    }}>
-                      <Ionicons name="trophy" size={16} color={medalColors[index]} />
-                      <Text style={{
-                        fontSize: 14,
-                        fontFamily: getFontFamily('bold'),
-                        color: medalColors[index],
-                        marginTop: 2,
-                      }}>
-                        {rank}
-                      </Text>
-                    </View>
-                    <Text style={{
-                      fontSize: 13,
-                      fontFamily: getFontFamily('medium'),
-                      color: colors['text-primary'],
-                      textAlign: 'center',
-                      marginBottom: 2,
-                    }} numberOfLines={1}>
-                      {participant.name}
-                    </Text>
-                    {participant.primaryValue && (
-                      <Text style={{
-                        fontSize: 11,
-                        fontFamily: getFontFamily('regular'),
-                        color: colors['text-secondary'],
-                      }}>
-                        {participant.primaryValue}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {/* Rest of participants - minimal list */}
-        {rest.length > 0 && (
-          <View>
-            <Text style={{
-              fontSize: 14,
-              fontFamily: getFontFamily('semibold'),
-              color: colors['text-secondary'],
-              marginBottom: 12,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-            }}>
-              Rankings
-            </Text>
-            {rest.map((participant) => (
-              <TouchableOpacity
-                key={participant.id}
-                activeOpacity={0.7}
-                onPress={() => router.push(`/(tabs)/tournaments/${tournamentId}/events/${eventId}/participants/${participant.id}` as any)}
-                style={{
-                  backgroundColor: colors['bg-card'],
-                  borderRadius: 10,
-                  padding: 12,
-                  marginBottom: 6,
-                  borderWidth: 1,
-                  borderColor: colors['border-default'],
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}
-              >
-                <View style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 14,
-                  backgroundColor: accent 
-                    ? accent.primary + '15' 
-                    : colors['bg-primary'] + '15',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 10,
-                }}>
+        {leaderboard.map((participant) => {
+          const rankStyle = getRankBadgeStyle(participant.rank);
+          const rankTextColor = getRankTextColor(participant.rank);
+          const isTopThree = participant.rank <= 3;
+          
+          return (
+            <TouchableOpacity
+              key={participant.id}
+              activeOpacity={0.7}
+              onPress={() => router.push(`/(tabs)/tournaments/${tournamentId}/events/${eventId}/participants/${participant.id}` as any)}
+              style={{
+                backgroundColor: colors['bg-card'],
+                borderRadius: 12,
+                padding: 14,
+                marginBottom: 8,
+                borderWidth: 1,
+                borderColor: isTopThree ? rankStyle.borderColor : colors['border-default'],
+                flexDirection: 'row',
+                alignItems: 'center',
+                borderLeftWidth: isTopThree ? 3 : 1,
+                borderLeftColor: isTopThree ? rankStyle.borderColor : (accent ? accent.primary : colors['border-default']),
+              }}
+            >
+              <View style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: rankStyle.backgroundColor,
+                borderWidth: isTopThree ? 1.5 : 0,
+                borderColor: rankStyle.borderColor,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 12,
+                position: 'relative',
+              }}>
+                {isTopThree ? (
+                  <Ionicons 
+                    name="trophy" 
+                    size={18} 
+                    color={rankTextColor} 
+                  />
+                ) : (
                   <Text style={{
-                    fontSize: 12,
+                    fontSize: 14,
                     fontFamily: getFontFamily('semibold'),
-                    color: colors['bg-primary'],
+                    color: rankTextColor,
                   }}>
                     {participant.rank}
                   </Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{
-                    fontSize: 14,
-                    fontFamily: getFontFamily('medium'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.name}
-                  </Text>
-                </View>
-                {participant.primaryValue && (
-                  <Text style={{
-                    fontSize: 13,
-                    fontFamily: getFontFamily('medium'),
-                    color: colors['text-secondary'],
-                  }}>
-                    {participant.primaryValue}
-                  </Text>
                 )}
-                <Ionicons name="chevron-forward" size={16} color={colors['text-muted']} style={{ marginLeft: 8 }} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+              </View>
+              
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  fontSize: 15,
+                  fontFamily: getFontFamily('medium'),
+                  color: colors['text-primary'],
+                  marginBottom: 2,
+                }}>
+                  {participant.name}
+                </Text>
+                {participant.primaryValue && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <Text style={{
+                      fontSize: 12,
+                      fontFamily: getFontFamily('regular'),
+                      color: colors['text-secondary'],
+                    }}>
+                      {participant.primaryMetric === 'time' ? '⏱' : participant.primaryMetric === 'weight' ? '⚖' : '💪'}
+                    </Text>
+                    <Text style={{
+                      fontSize: 12,
+                      fontFamily: getFontFamily('medium'),
+                      color: isTopThree ? rankTextColor : colors['text-secondary'],
+                    }}>
+                      {participant.primaryValue}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              
+              <Ionicons name="chevron-forward" size={16} color={colors['text-muted']} style={{ marginLeft: 8 }} />
+            </TouchableOpacity>
+          );
+        })}
       </View>
     );
   };
@@ -513,7 +483,7 @@ export default function EventDetailScreen() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors['bg-surface'] }}>
       <View style={{ flex: 1 }}>
-        {/* Event Header with Accent */}
+        {/* Event Header with Accent - Level 2: Medium prominence */}
         <View style={{
           position: 'relative',
           paddingHorizontal: 16,
@@ -523,22 +493,21 @@ export default function EventDetailScreen() {
           borderBottomColor: colors['border-default'],
           overflow: 'hidden',
         }}>
-          {/* Subtle accent background */}
+          {/* Abstract accent background - Level 2: Single, smaller circle */}
           {accent && (
             <View style={{
               position: 'absolute',
-              top: -20,
-              right: -20,
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              backgroundColor: accent.primary + '06',
-              opacity: 0.5,
+              top: -25,
+              right: -25,
+              width: 85,
+              height: 85,
+              borderRadius: 42.5,
+              backgroundColor: accent.primary + (isDark ? '10' : '15'),
             }} />
           )}
           
           <View style={{ flexDirection: 'row', alignItems: 'center', position: 'relative', zIndex: 1 }}>
-            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
+            <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12, padding: 4 }}>
               <Ionicons name="arrow-back" size={22} color={colors['text-primary']} />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
@@ -546,34 +515,36 @@ export default function EventDetailScreen() {
                 fontSize: 18,
                 fontFamily: getFontFamily('semibold'),
                 color: colors['text-primary'],
+                letterSpacing: -0.3,
               }} numberOfLines={1}>
                 {event.name}
               </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                 <View style={{
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 4,
+                  paddingHorizontal: 7,
+                  paddingVertical: 3,
+                  borderRadius: 5,
                   backgroundColor: accent 
-                    ? accent.primary + '15' 
-                    : colors['bg-primary'] + '15',
+                    ? accent.primary + '12' 
+                    : colors['bg-primary'] + '12',
                 }}>
                   <Text style={{
                     fontSize: 11,
                     fontFamily: getFontFamily('medium'),
                     color: accent ? accent.primary : colors['bg-primary'],
+                    letterSpacing: 0.2,
                   }}>
                     {event.category}
                   </Text>
                 </View>
               </View>
             </View>
-            <TouchableOpacity onPress={() => setMenuVisible(true)}>
-              <Ionicons name="ellipsis-horizontal" size={20} color={colors['text-secondary']} />
+            <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ padding: 4 }}>
+              <Ionicons name="ellipsis-horizontal" size={20} color={colors['text-primary']} />
             </TouchableOpacity>
           </View>
           
-          {/* Accent border */}
+          {/* Accent border - Level 2: More subtle */}
           {accent && (
             <View style={{
               position: 'absolute',
@@ -581,7 +552,7 @@ export default function EventDetailScreen() {
               left: 0,
               right: 0,
               height: 2,
-              backgroundColor: accent.primary + '30',
+              backgroundColor: accent.primary + '28',
             }} />
           )}
         </View>
@@ -605,6 +576,7 @@ export default function EventDetailScreen() {
             onTabChange={setActiveTab}
             style="underline"
             accentColor={accent?.primary}
+            counts={[eventParticipants.length, undefined]}
           />
 
           {/* Subtle Accent Divider */}
