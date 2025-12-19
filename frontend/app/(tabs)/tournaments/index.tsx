@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../../stores/themeStore';
 import { router } from 'expo-router';
 import FloatingActionButton from '../../../components/ui/FloatingActionButton';
+import { SkeletonContainer } from '../../../components/ui/Skeleton';
 import { useColors } from '../../../utils/colors';
 import { getFontFamily } from '../../../utils/fonts';
 import { useTournamentStore } from '../../../stores/tournamentStore';
@@ -258,17 +259,7 @@ export default function TournamentsScreen() {
           {/* Tournaments List */}
           <View style={{ paddingHorizontal: 16 }}>
             {isLoadingEvents ? (
-              <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingBottom: 40 }}>
-                <ActivityIndicator size="large" color={colors['bg-primary']} />
-                <Text style={{
-                  fontSize: 16,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginTop: 12,
-                }}>
-                  Loading tournaments...
-                </Text>
-              </View>
+              <SkeletonContainer count={3} layout="tournament" />
             ) : tournaments.length === 0 ? (
               <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60, paddingBottom: 40 }}>
                 <Ionicons name="trophy-outline" size={40} color={colors['text-muted']} />

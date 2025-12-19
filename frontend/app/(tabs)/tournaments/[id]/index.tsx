@@ -10,6 +10,7 @@ import { useColors } from '../../../../utils/colors';
 import { getFontFamily } from '../../../../utils/fonts';
 import TabSwitch from '../../../../components/ui/TabSwitch';
 import FloatingActionButton from '../../../../components/ui/FloatingActionButton';
+import { SkeletonContainer } from '../../../../components/ui/Skeleton';
 import { useTournamentStore } from '../../../../stores/tournamentStore';
 import { getTournamentAccent, getTournamentAccentDark } from '../../../../utils/tournamentAccent';
 import ConfirmDialog from '../../../../components/ui/ConfirmDialog';
@@ -114,21 +115,7 @@ export default function TournamentDetailScreen() {
   const renderEventsTab = () => (
     <View style={{ paddingBottom: insets.bottom + 100 }}>
       {isLoadingEvents ? (
-        <View style={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingVertical: 40,
-        }}>
-          <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
-          <Text style={{
-            fontSize: 14,
-            fontFamily: getFontFamily('medium'),
-            color: colors['text-secondary'],
-            marginTop: 12,
-          }}>
-            Loading events...
-          </Text>
-        </View>
+        <SkeletonContainer count={3} layout="event" />
       ) : tournament.events.length === 0 ? (
         <View style={{
           alignItems: 'center',
@@ -227,21 +214,7 @@ export default function TournamentDetailScreen() {
   const renderParticipantsTab = () => (
     <View style={{ paddingBottom: insets.bottom + 100 }}>
       {isLoadingParticipants ? (
-        <View style={{
-          alignItems: 'center',
-          justifyContent: 'center',
-          paddingVertical: 40,
-        }}>
-          <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
-          <Text style={{
-            fontSize: 14,
-            fontFamily: getFontFamily('medium'),
-            color: colors['text-secondary'],
-            marginTop: 12,
-          }}>
-            Loading participants...
-          </Text>
-        </View>
+        <SkeletonContainer count={4} layout="participant" />
       ) : tournament.participants.length === 0 ? (
         <View style={{
           alignItems: 'center',
