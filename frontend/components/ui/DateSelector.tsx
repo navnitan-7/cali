@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Modal, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../stores/themeStore';
 import { useColors } from '../../utils/colors';
@@ -7,16 +7,34 @@ import { getFontFamily } from '../../utils/fonts';
 
 interface DateSelectorProps {
   date: Date;
-  onDateChange: (days: number) => void;
-  onDateSelect?: (date: Date) => void;
+  onDateChange?: (days: number) => void;
+  onDateSelect?: (dateString: string) => void; // Changed to return formatted date string (YYYY-MM-DD)
+  visible?: boolean;
+  onClose?: () => void;
 }
 
-export default function DateSelector({ date, onDateChange, onDateSelect }: DateSelectorProps) {
+// Helper function to format date in local timezone (YYYY-MM-DD)
+const formatDateLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+export default function DateSelector({ date, onDateChange, onDateSelect, visible, onClose }: DateSelectorProps) {
   const theme = useTheme();
   const isDark = theme === 'dark';
   const colors = useColors(isDark);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [tempSelectedDate, setTempSelectedDate] = useState(date);
+  
+  // Use visible prop if provided, otherwise use internal state
+  const isModalVisible = visible !== undefined ? visible : showDatePicker;
+  
+  // Update tempSelectedDate when date prop changes
+  React.useEffect(() => {
+    setTempSelectedDate(date);
+  }, [date]);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-GB', {
@@ -58,9 +76,28 @@ export default function DateSelector({ date, onDateChange, onDateSelect }: DateS
 
   const handleDateSelect = (selectedDate: Date) => {
     setTempSelectedDate(selectedDate);
+    // Format date in local timezone before passing to callback
+    const formattedDate = formatDateLocal(selectedDate);
+    
     // Automatically close modal and update date when selected
-    setShowDatePicker(false);
-    if (onDateSelect) onDateSelect(selectedDate);
+    if (visible !== undefined && onClose) {
+      // Modal mode - use onClose
+      onClose();
+    } else {
+      // Standalone mode - use internal state
+      setShowDatePicker(false);
+    }
+    
+    // Pass formatted date string (YYYY-MM-DD) instead of Date object
+    if (onDateSelect) onDateSelect(formattedDate);
+  };
+  
+  const handleClose = () => {
+    if (visible !== undefined && onClose) {
+      onClose();
+    } else {
+      setShowDatePicker(false);
+    }
   };
 
   const navigateMonth = (direction: number) => {
@@ -69,73 +106,183 @@ export default function DateSelector({ date, onDateChange, onDateSelect }: DateS
     setTempSelectedDate(newDate);
   };
 
+  // If visible prop is provided, this is modal mode - only show modal
+  // Otherwise, show both header and modal (standalone mode)
+  const isModalMode = visible !== undefined;
+
+  const styles = StyleSheet.create({
+    headerContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+    },
+    headerButton: {
+      padding: 8,
+    },
+    headerDateButton: {
+      flex: 1,
+      alignItems: 'center',
+      marginHorizontal: 16,
+    },
+    modalOverlay: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      paddingHorizontal: 16,
+    },
+    modalContent: {
+      width: '100%',
+      maxWidth: 384,
+      borderRadius: 20,
+      padding: 28,
+      backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.25,
+      shadowRadius: 16,
+      elevation: 12,
+    },
+    monthHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 28,
+    },
+    monthNavButton: {
+      padding: 12,
+      marginHorizontal: -12,
+      borderRadius: 8,
+    },
+    monthText: {
+      fontSize: 20,
+      fontFamily: getFontFamily('semibold'),
+      fontWeight: '600',
+      color: colors['text-primary'],
+    },
+    dayLabelsContainer: {
+      flexDirection: 'row',
+      marginBottom: 16,
+    },
+    dayLabel: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 8,
+    },
+    dayLabelText: {
+      fontSize: 11,
+      fontFamily: getFontFamily('medium'),
+      fontWeight: '600',
+      letterSpacing: 0.5,
+      color: isDark ? '#888888' : colors['text-secondary'],
+    },
+    calendarGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+    },
+    dayButton: {
+      flexBasis: '14.28%',
+      maxWidth: '14.28%',
+      height: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 24,
+    },
+    dayButtonSelected: {
+      backgroundColor: isDark ? '#ffffff' : colors['bg-primary'],
+    },
+    dayButtonToday: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+    },
+    dayText: {
+      fontSize: 15,
+      fontFamily: getFontFamily('medium'),
+      fontWeight: '500',
+    },
+    dayTextSelected: {
+      fontFamily: getFontFamily('semibold'),
+      fontWeight: '600',
+      color: isDark ? '#000000' : '#ffffff',
+    },
+    dayTextCurrentMonth: {
+      color: colors['text-primary'],
+    },
+    dayTextOtherMonth: {
+      color: isDark ? '#333333' : colors['text-muted'],
+    },
+    dayTextToday: {
+      color: colors['bg-primary'],
+      fontWeight: '600',
+    },
+  });
+  
   return (
     <>
-      {/* Date Header */}
-      <View className="flex-row items-center justify-center py-3 px-4">
-        <TouchableOpacity onPress={() => onDateChange(-1)} className="p-2">
-          <Ionicons name="chevron-back" size={24} color={colors['icon-primary']} />
-        </TouchableOpacity>
+      {/* Date Header - only show in standalone mode */}
+      {!isModalMode && (
+        <View style={styles.headerContainer}>
+          <TouchableOpacity onPress={() => onDateChange && onDateChange(-1)} style={styles.headerButton}>
+            <Ionicons name="chevron-back" size={24} color={colors['icon-primary']} />
+          </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => setShowDatePicker(true)} className="flex-1 items-center mx-4">
-          <Text style={{
-            fontSize: 18,
-            fontFamily: getFontFamily('semibold'),
-            fontWeight: '600',
-            color: colors['text-primary']
-          }}>
-            {formatDate(date)}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.headerDateButton}>
+            <Text style={{
+              fontSize: 18,
+              fontFamily: getFontFamily('semibold'),
+              fontWeight: '600',
+              color: colors['text-primary']
+            }}>
+              {formatDate(date)}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => onDateChange(1)} className="p-2">
-          <Ionicons name="chevron-forward" size={24} color={colors['icon-primary']} />
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity onPress={() => onDateChange && onDateChange(1)} style={styles.headerButton}>
+            <Ionicons name="chevron-forward" size={24} color={colors['icon-primary']} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Modal */}
-      <Modal animationType="slide" transparent visible={showDatePicker}>
+      <Modal animationType="fade" transparent visible={isModalVisible}>
         <Pressable 
-          className="flex-1 justify-center items-center bg-black/50 px-4"
-          onPress={() => setShowDatePicker(false)}
+          style={styles.modalOverlay}
+          onPress={handleClose}
         >
           <Pressable 
-            className={`w-full max-w-sm rounded-2xl p-8 shadow-lg ${isDark ? 'bg-gray-800' : 'bg-white'}`}
+            style={styles.modalContent}
             onPress={(e) => e.stopPropagation()}
           >
-
             {/* Month Header */}
-            <View className="flex-row items-center justify-between mb-8">
-              <TouchableOpacity onPress={() => navigateMonth(-1)} className="p-3 -ml-3">
-                <Ionicons name="chevron-back" size={22} color={colors['icon-muted']} />
+            <View style={styles.monthHeader}>
+              <TouchableOpacity 
+                onPress={() => navigateMonth(-1)} 
+                style={styles.monthNavButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="chevron-back" size={22} color={isDark ? '#ffffff' : colors['icon-muted']} />
               </TouchableOpacity>
-              <Text style={{
-                fontSize: 20,
-                fontFamily: getFontFamily('semibold'),
-                fontWeight: '600',
-                color: colors['text-primary']
-              }}>
+              <Text style={styles.monthText}>
                 {tempSelectedDate.toLocaleDateString('en-US', {
                   month: 'long',
                   year: 'numeric',
                 })}
               </Text>
-              <TouchableOpacity onPress={() => navigateMonth(1)} className="p-3 -mr-3">
-                <Ionicons name="chevron-forward" size={22} color={colors['icon-muted']} />
+              <TouchableOpacity 
+                onPress={() => navigateMonth(1)} 
+                style={styles.monthNavButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="chevron-forward" size={22} color={isDark ? '#ffffff' : colors['icon-muted']} />
               </TouchableOpacity>
             </View>
 
             {/* Day Labels */}
-            <View className="flex-row mb-6">
+            <View style={styles.dayLabelsContainer}>
               {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((day) => (
-                <View key={day} className="flex-1 items-center py-2">
-                  <Text style={{
-                    fontSize: 12,
-                    fontFamily: getFontFamily('medium'),
-                    fontWeight: '500',
-                    letterSpacing: 0.5,
-                    color: colors['text-secondary']
-                  }}>
+                <View key={day} style={styles.dayLabel}>
+                  <Text style={styles.dayLabelText}>
                     {day}
                   </Text>
                 </View>
@@ -143,38 +290,34 @@ export default function DateSelector({ date, onDateChange, onDateSelect }: DateS
             </View>
 
             {/* Calendar Grid */}
-            <View className="flex-row flex-wrap gap-y-2">
-              {generateCalendarDays().map((dayObj, index) => (
-                <TouchableOpacity
-                  key={index}
-                  onPress={() => dayObj.isCurrentMonth && handleDateSelect(dayObj.date)}
-                  className={`items-center justify-center rounded-full aspect-square`}
-                  style={{
-                    flexBasis: '14.28%',
-                    maxWidth: '14.28%',
-                    height: 48,
-                    backgroundColor: dayObj.isSelected
-                      ? colors['bg-primary']
-                      : 'transparent',
-                  }}
-                  disabled={!dayObj.isCurrentMonth}
-                >
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: dayObj.isSelected ? getFontFamily('semibold') : getFontFamily('medium'),
-                    fontWeight: dayObj.isSelected ? '600' : '500',
-                    color: dayObj.isSelected
-                      ? colors.white
-                      : dayObj.isToday && dayObj.isCurrentMonth
-                      ? colors['text-brand']
-                      : dayObj.isCurrentMonth
-                      ? colors['text-primary']
-                      : colors['text-muted']
-                  }}>
-                    {dayObj.day}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.calendarGrid}>
+              {generateCalendarDays().map((dayObj, index) => {
+                const isSelected = dayObj.isSelected;
+                const isToday = dayObj.isToday && dayObj.isCurrentMonth && !isSelected;
+                
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    onPress={() => dayObj.isCurrentMonth && handleDateSelect(dayObj.date)}
+                    style={[
+                      styles.dayButton,
+                      isSelected && styles.dayButtonSelected,
+                      isToday && styles.dayButtonToday,
+                    ]}
+                    disabled={!dayObj.isCurrentMonth}
+                  >
+                    <Text style={[
+                      styles.dayText,
+                      isSelected && styles.dayTextSelected,
+                      !isSelected && dayObj.isCurrentMonth && styles.dayTextCurrentMonth,
+                      !isSelected && !dayObj.isCurrentMonth && styles.dayTextOtherMonth,
+                      isToday && styles.dayTextToday,
+                    ]}>
+                      {dayObj.day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </Pressable>
         </Pressable>

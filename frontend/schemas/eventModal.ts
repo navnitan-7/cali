@@ -5,6 +5,8 @@ export const eventSchema = z.object({
   name: z.string()
     .min(1, 'Event name is required')
     .max(100, 'Event name must be less than 100 characters'),
+  date: z.string()
+    .min(1, 'Date is required'),
   category: z.string()
     .min(1, 'Category is required'),
 });
@@ -21,6 +23,7 @@ export interface EventDataWithId extends EventData {
 // Default values
 export const eventDefaults: EventData = {
   name: '',
+  date: new Date().toISOString().split('T')[0],
   category: '',
 };
 

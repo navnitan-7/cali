@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -170,45 +170,67 @@ export default function ParticipantDetailScreen() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors['bg-surface'] }}>
       <View style={{ flex: 1 }}>
-        {/* Header */}
+        {/* Header - Level 3: Minimal, clean */}
         <View style={{
+          position: 'relative',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
           paddingHorizontal: 16,
           paddingTop: 12,
-          paddingBottom: 12,
+          paddingBottom: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: colors['border-default'],
         }}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color={colors['icon-primary']} />
+          <TouchableOpacity onPress={() => router.back()} style={{ padding: 4 }}>
+            <Ionicons name="arrow-back" size={22} color={colors['text-primary']} />
           </TouchableOpacity>
           <Text style={{
             fontSize: 18,
-            fontFamily: getFontFamily('bold'),
+            fontFamily: getFontFamily('semibold'),
             color: colors['text-primary'],
+            letterSpacing: -0.3,
           }}>
             Participant Details
           </Text>
           {!isEditMode ? (
-            <TouchableOpacity onPress={() => setMenuVisible(true)}>
-              <Ionicons name="ellipsis-horizontal" size={24} color={colors['icon-primary']} />
+            <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ padding: 4 }}>
+              <Ionicons name="ellipsis-horizontal" size={20} color={colors['text-primary']} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={handleCancel}>
-              <Text style={{
-                fontSize: 16,
-                fontFamily: getFontFamily('medium'),
-                color: colors['text-primary'],
-              }}>
-                Cancel
-              </Text>
+            <TouchableOpacity
+              onPress={handleSave}
+              disabled={!name.trim() || selectedEvents.length === 0 || isSaving}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor: (!name.trim() || selectedEvents.length === 0 || isSaving) 
+                  ? colors['bg-secondary'] 
+                  : (isDark ? colors.white : colors['bg-primary']),
+                opacity: (!name.trim() || selectedEvents.length === 0 || isSaving) ? 0.5 : 1,
+              }}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color={isDark ? colors.black : colors.white} />
+              ) : (
+                <Text style={{
+                  fontSize: 15,
+                  fontFamily: getFontFamily('semibold'),
+                  color: (!name.trim() || selectedEvents.length === 0 || isSaving)
+                    ? colors['text-secondary']
+                    : (isDark ? colors.black : colors.white),
+                }}>
+                  Save
+                </Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
 
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 100 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: insets.bottom + 100 }}
         >
           {isEditMode ? (
             <>
@@ -503,216 +525,144 @@ export default function ParticipantDetailScreen() {
                 )}
               </View>
 
-              <Button
-                title="Save Changes"
-                onPress={handleSave}
-                variant="primary"
-                fullWidth
-                style={{ marginTop: 12, marginBottom: 20 }}
-                disabled={!name.trim() || selectedEvents.length === 0 || isSaving}
-                loading={isSaving}
-              />
             </>
           ) : (
             <>
-              {/* Name - Read Only */}
-              <View style={{ marginBottom: 24 }}>
+              {/* Main Info Card */}
+              <View style={{
+                borderRadius: 16,
+                padding: 20,
+                marginBottom: 20,
+                backgroundColor: colors['bg-card'],
+                borderWidth: 1,
+                borderColor: colors['border-default'],
+              }}>
+                {/* Name - Primary */}
                 <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
+                  fontSize: 24,
+                  fontFamily: getFontFamily('bold'),
+                  color: colors['text-primary'],
+                  marginBottom: 20,
                 }}>
-                  Name
+                  {participant.name}
                 </Text>
-                <View style={{
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  backgroundColor: colors['bg-secondary'],
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('regular'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.name}
-                  </Text>
+
+                {/* Basic Info Grid */}
+                <View style={{ marginBottom: 16 }}>
+                  {participant.age && (
+                    <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
+                      <Ionicons name="calendar-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
+                      <Text style={{
+                        fontSize: 15,
+                        fontFamily: getFontFamily('regular'),
+                        color: colors['text-primary'],
+                        flex: 1,
+                      }}>
+                        {participant.age} years
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {(participant.gender || participant.division) && (
+                    <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
+                      <Ionicons name="person-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
+                      <Text style={{
+                        fontSize: 15,
+                        fontFamily: getFontFamily('regular'),
+                        color: colors['text-primary'],
+                        flex: 1,
+                      }}>
+                        {participant.gender || participant.division}
+                      </Text>
+                    </View>
+                  )}
+
+                  {participant.weight && (
+                    <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
+                      <Ionicons name="barbell-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
+                      <Text style={{
+                        fontSize: 15,
+                        fontFamily: getFontFamily('regular'),
+                        color: colors['text-primary'],
+                        flex: 1,
+                      }}>
+                        {participant.weight} kg
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Divider */}
+                {(participant.phone || participant.country || participant.state) && (
+                  <View style={{
+                    height: 1,
+                    backgroundColor: colors['border-default'],
+                    marginVertical: 16,
+                  }} />
+                )}
+
+                {/* Contact & Location Info */}
+                <View>
+                  {participant.phone && (
+                    <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
+                      <Ionicons name="call-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
+                      <Text style={{
+                        fontSize: 15,
+                        fontFamily: getFontFamily('regular'),
+                        color: colors['text-primary'],
+                        flex: 1,
+                      }}>
+                        {participant.phone}
+                      </Text>
+                    </View>
+                  )}
+
+                  {participant.country && (
+                    <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
+                      <Ionicons name="globe-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
+                      <Text style={{
+                        fontSize: 15,
+                        fontFamily: getFontFamily('regular'),
+                        color: colors['text-primary'],
+                        flex: 1,
+                      }}>
+                        {participant.country}
+                      </Text>
+                    </View>
+                  )}
+
+                  {participant.state && (
+                    <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
+                      <Ionicons name="location-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
+                      <Text style={{
+                        fontSize: 15,
+                        fontFamily: getFontFamily('regular'),
+                        color: colors['text-primary'],
+                        flex: 1,
+                      }}>
+                        {participant.state}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
 
-              {/* Age - Read Only */}
+              {/* Events Section */}
               <View style={{ marginBottom: 24 }}>
                 <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
-                }}>
-                  Age
-                </Text>
-                <View style={{
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  backgroundColor: colors['bg-secondary'],
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('regular'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.age ? `${participant.age} years` : 'Not specified'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Gender - Read Only */}
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
-                }}>
-                  Gender
-                </Text>
-                <View style={{
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  backgroundColor: colors['bg-secondary'],
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('regular'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.gender || participant.division || 'Not specified'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Weight - Read Only */}
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
-                }}>
-                  Weight (kg)
-                </Text>
-                <View style={{
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  backgroundColor: colors['bg-secondary'],
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('regular'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.weight ? `${participant.weight} kg` : 'Not specified'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Phone - Read Only */}
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
-                }}>
-                  Phone
-                </Text>
-                <View style={{
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  backgroundColor: colors['bg-secondary'],
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('regular'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.phone || 'Not specified'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Country - Read Only */}
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
-                }}>
-                  Country
-                </Text>
-                <View style={{
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  backgroundColor: colors['bg-secondary'],
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('regular'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.country || 'Not specified'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* State - Read Only */}
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
-                }}>
-                  State
-                </Text>
-                <View style={{
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 12,
-                  backgroundColor: colors['bg-secondary'],
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontFamily: getFontFamily('regular'),
-                    color: colors['text-primary'],
-                  }}>
-                    {participant.state || 'Not specified'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Events - Read Only */}
-              <View style={{ marginBottom: 24 }}>
-                <Text style={{
-                  fontSize: 14,
-                  fontFamily: getFontFamily('medium'),
-                  color: colors['text-secondary'],
-                  marginBottom: 8,
+                  fontSize: 16,
+                  fontFamily: getFontFamily('semibold'),
+                  color: colors['text-primary'],
+                  marginBottom: 12,
                 }}>
                   Events
                 </Text>
                 {isLoadingEvents ? (
                   <View style={{
                     padding: 16,
-                    borderRadius: 10,
+                    borderRadius: 12,
                     backgroundColor: colors['bg-card'],
-                    borderWidth: 1.5,
+                    borderWidth: 1,
                     borderColor: colors['border-default'],
                   }}>
                     <Text style={{
@@ -727,9 +677,9 @@ export default function ParticipantDetailScreen() {
                 ) : selectedEvents.length === 0 ? (
                   <View style={{
                     padding: 16,
-                    borderRadius: 10,
+                    borderRadius: 12,
                     backgroundColor: colors['bg-card'],
-                    borderWidth: 1.5,
+                    borderWidth: 1,
                     borderColor: colors['border-default'],
                   }}>
                     <Text style={{
@@ -749,16 +699,16 @@ export default function ParticipantDetailScreen() {
                         <View
                           key={event.id}
                           style={{
-                            paddingHorizontal: 16,
-                            paddingVertical: 10,
-                            borderRadius: 20,
-                            borderWidth: 1.5,
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: 12,
+                            borderWidth: 1,
                             borderColor: colors['border-default'],
-                            backgroundColor: colors['bg-secondary'],
+                            backgroundColor: colors['bg-card'],
                           }}
                         >
                           <Text style={{
-                            fontSize: 14,
+                            fontSize: 13,
                             fontFamily: getFontFamily('medium'),
                             color: colors['text-primary'],
                           }}>
