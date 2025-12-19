@@ -50,21 +50,20 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
                 borderBottomColor: activeTab === tab 
                   ? getActiveColor()
                   : 'transparent',
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <Text style={{
-                fontFamily: getFontFamily(activeTab === tab ? 'semibold' : 'regular'),
-                fontSize: 15,
-                color: activeTab === tab
-                  ? colors['text-primary']
-                  : colors['text-secondary']
-              }}>
-                {tab}
-              </Text>
-              {count !== undefined && (
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{
+              fontFamily: getFontFamily(activeTab === tab ? 'semibold' : 'regular'),
+              fontSize: 15,
+              color: activeTab === tab
+                ? colors['text-primary']
+                : colors['text-secondary']
+            }}>
+              {tab}
+            </Text>
+              {count !== undefined && count !== null && (
                 <View style={{
                   minWidth: 20,
                   height: 20,
@@ -75,6 +74,7 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
                   paddingHorizontal: 6,
                   justifyContent: 'center',
                   alignItems: 'center',
+                  marginLeft: 6,
                 }}>
                   <Text style={{
                     fontSize: 11,
@@ -83,7 +83,7 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
                       ? (accentColor || colors['bg-primary'])
                       : colors['text-secondary'],
                   }}>
-                    {count}
+                    {String(count)}
                   </Text>
                 </View>
               )}
@@ -120,7 +120,6 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 6,
             }}
           >
             <Text style={{
@@ -133,7 +132,7 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
             }}>
               {tab}
             </Text>
-            {count !== undefined && (
+            {count !== undefined && count !== null && (
               <View style={{
                 minWidth: 20,
                 height: 20,
@@ -144,6 +143,7 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
                 paddingHorizontal: 6,
                 justifyContent: 'center',
                 alignItems: 'center',
+                marginLeft: 6,
               }}>
                 <Text style={{
                   fontSize: 11,
@@ -152,7 +152,7 @@ export default function TabSwitch({ tabs, activeTab, onTabChange, style = 'under
                     ? (accentColor || colors['bg-primary'])
                     : colors['text-secondary'],
                 }}>
-                  {count}
+                  {String(count)}
                 </Text>
               </View>
             )}

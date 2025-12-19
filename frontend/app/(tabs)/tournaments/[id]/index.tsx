@@ -292,7 +292,7 @@ export default function TournamentDetailScreen() {
               }}>
                 {participant.name}
               </Text>
-              {participant.weight && (
+              {participant.weight !== undefined && participant.weight !== null && (
                 <Text style={{
                   fontSize: 12,
                   fontFamily: getFontFamily('regular'),

@@ -549,7 +549,7 @@ export default function ParticipantDetailScreen() {
 
                 {/* Basic Info Grid */}
                 <View style={{ marginBottom: 16 }}>
-                  {participant.age && (
+                  {participant.age !== undefined && participant.age !== null && (
                     <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
                       <Ionicons name="calendar-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
                       <Text style={{
@@ -558,7 +558,7 @@ export default function ParticipantDetailScreen() {
                         color: colors['text-primary'],
                         flex: 1,
                       }}>
-                        {participant.age} years
+                        {String(participant.age)} years
                       </Text>
                     </View>
                   )}
@@ -572,12 +572,12 @@ export default function ParticipantDetailScreen() {
                         color: colors['text-primary'],
                         flex: 1,
                       }}>
-                        {participant.gender || participant.division}
+                        {String(participant.gender || participant.division)}
                       </Text>
                     </View>
                   )}
 
-                  {participant.weight && (
+                  {participant.weight !== undefined && participant.weight !== null && (
                     <View style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'center' }}>
                       <Ionicons name="barbell-outline" size={18} color={colors['text-secondary']} style={{ marginRight: 10 }} />
                       <Text style={{
@@ -586,7 +586,7 @@ export default function ParticipantDetailScreen() {
                         color: colors['text-primary'],
                         flex: 1,
                       }}>
-                        {participant.weight} kg
+                        {String(participant.weight)} kg
                       </Text>
                     </View>
                   )}
@@ -612,7 +612,7 @@ export default function ParticipantDetailScreen() {
                         color: colors['text-primary'],
                         flex: 1,
                       }}>
-                        {participant.phone}
+                        {String(participant.phone)}
                       </Text>
                     </View>
                   )}
@@ -626,7 +626,7 @@ export default function ParticipantDetailScreen() {
                         color: colors['text-primary'],
                         flex: 1,
                       }}>
-                        {participant.country}
+                        {String(participant.country)}
                       </Text>
                     </View>
                   )}
@@ -640,7 +640,7 @@ export default function ParticipantDetailScreen() {
                         color: colors['text-primary'],
                         flex: 1,
                       }}>
-                        {participant.state}
+                        {String(participant.state)}
                       </Text>
                     </View>
                   )}
