@@ -7,6 +7,7 @@ import { useTheme } from '../../../../../stores/themeStore';
 import { useColors } from '../../../../../utils/colors';
 import { getFontFamily } from '../../../../../utils/fonts';
 import TabSwitch from '../../../../../components/ui/TabSwitch';
+import { SkeletonContainer } from '../../../../../components/ui/Skeleton';
 import { useTournamentStore } from '../../../../../stores/tournamentStore';
 import ConfirmDialog from '../../../../../components/ui/ConfirmDialog';
 import { getTournamentAccent, getTournamentAccentDark } from '../../../../../utils/tournamentAccent';
@@ -164,21 +165,7 @@ export default function EventDetailScreen() {
     return (
       <View style={{ paddingBottom: insets.bottom + 100 }}>
         {isLoading ? (
-          <View style={{
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 40,
-          }}>
-            <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
-            <Text style={{
-              fontSize: 14,
-              fontFamily: getFontFamily('medium'),
-              color: colors['text-secondary'],
-              marginTop: 12,
-            }}>
-              Loading participants...
-            </Text>
-          </View>
+          <SkeletonContainer count={4} layout="participant" />
         ) : eventParticipants.length === 0 ? (
         <View style={{
           alignItems: 'center',

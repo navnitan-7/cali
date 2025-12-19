@@ -15,6 +15,8 @@ import { ACTIVITY_FIELDS_BY_EVENT, MAX_ATTEMPTS_PER_EVENT, FIELD_LABELS, FIELD_I
 import Button from '@/components/ui/Button';
 import TabSwitch from '@/components/ui/TabSwitch';
 import TimePicker from '@/components/ui/TimePicker';
+import { SkeletonContainer } from '@/components/ui/Skeleton';
+import { MetricItem } from '@/components/eventSpecific';
 import { getTournamentAccent, getTournamentAccentDark } from '@/utils/tournamentAccent';
 
 export default function EventParticipantDetailScreen() {
@@ -213,7 +215,7 @@ export default function EventParticipantDetailScreen() {
           }
           
           // Handle reps field if it exists
-          if (sourceData.reps !== undefined && sourceData.reps !== null) {
+          if ('reps' in sourceData && sourceData.reps !== undefined && sourceData.reps !== null) {
             editData.reps = sourceData.reps;
           }
           
@@ -984,53 +986,23 @@ export default function EventParticipantDetailScreen() {
     );
   });
 
-  // Helper to format time from milliseconds to readable format
-  const formatTime = (milliseconds?: number): string => {
-    if (milliseconds === undefined || milliseconds === null) return '';
-    const totalMs = Math.floor(milliseconds);
-    const minutes = Math.floor(totalMs / 60000);
-    const seconds = Math.floor((totalMs % 60000) / 1000);
-    const ms = totalMs % 1000;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
-  };
-
-  // Get table columns (attempt_id + required fields excluding attempt_id)
-  const tableColumns = useMemo(() => {
-    if (!requiredFields.length) return [];
-    // attempt_id is always first, then other required fields
-    return requiredFields;
-  }, [requiredFields]);
-
-  // Get table rows based on MAX_ATTEMPTS_PER_EVENT
-  const tableRows = useMemo(() => {
+  // Prepare metrics list data
+  const metricsListData = useMemo(() => {
     if (!eventTypeId) return [];
     const maxAttempts = MAX_ATTEMPTS_PER_EVENT[eventTypeId] || 1;
-    const rows: Array<Record<string, any>> = [];
+    const list: Array<{ attemptId: number; metric: ActivityMetric | null; hasData: boolean }> = [];
     
-    // Create rows for each attempt
     for (let attemptId = 1; attemptId <= maxAttempts; attemptId++) {
-      // Find existing data for this attempt_id
-      const existingData = metricsData.find(m => m.attempt_id === attemptId);
-      
-      const row: Record<string, any> = {
-        attempt_id: attemptId,
-      };
-      
-      // Populate row with existing data or empty values
-      requiredFields.forEach(field => {
-        if (field === 'attempt_id') return; // Skip attempt_id as it's already set
-        if (existingData && existingData[field as keyof ActivityMetric] !== undefined) {
-          row[field] = existingData[field as keyof ActivityMetric];
-        } else {
-          row[field] = null; // Empty value
-        }
+      const existingMetric = metricsData.find(m => m.attempt_id === attemptId);
+      list.push({
+        attemptId,
+        metric: existingMetric || null,
+        hasData: !!existingMetric,
       });
-      
-      rows.push(row);
     }
     
-    return rows;
-  }, [eventTypeId, metricsData, requiredFields]);
+    return list;
+  }, [eventTypeId, metricsData]);
 
   // Render Metrics Tab
   const renderMetricsTab = () => {
@@ -1052,213 +1024,120 @@ export default function EventParticipantDetailScreen() {
 
     return (
       <View style={{ paddingBottom: insets.bottom + 100 }}>
-        <View style={{
-          borderRadius: 12,
-          padding: 16,
-          marginBottom: 20,
-          borderWidth: 1,
-          borderColor: colors['border-default'],
-          backgroundColor: colors['bg-card'],
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-            <Ionicons name="stats-chart" size={20} color={accent ? accent.primary : colors['bg-primary']} />
-            <Text style={{
-              fontSize: 16,
-              fontFamily: getFontFamily('semibold'),
-              color: colors['text-primary'],
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+          <Ionicons name="stats-chart" size={20} color={accent ? accent.primary : colors['bg-primary']} />
+          <Text style={{
+            fontSize: 16,
+            fontFamily: getFontFamily('semibold'),
+            color: colors['text-primary'],
+            marginLeft: 8,
+          }}>
+            Metrics
+          </Text>
+          {metricsListData.length > 0 && (
+            <View style={{
               marginLeft: 8,
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderRadius: 12,
+              backgroundColor: accent ? accent.primary + '20' : colors['bg-primary'] + '20',
             }}>
-              Metrics
-            </Text>
-          </View>
-
-          {/* Metrics Table */}
-          {isLoadingMetrics ? (
-            <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-              <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
               <Text style={{
-                fontSize: 14,
-                fontFamily: getFontFamily('medium'),
-                color: colors['text-secondary'],
-                marginTop: 12,
+                fontSize: 11,
+                fontFamily: getFontFamily('semibold'),
+                color: accent ? accent.primary : colors['bg-primary'],
               }}>
-                Loading metrics...
+                {metricsListData.filter(item => item.hasData).length}/{metricsListData.length}
               </Text>
             </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{
-                borderWidth: 1,
-                borderColor: colors['border-default'],
-                borderRadius: 8,
-                overflow: 'hidden',
-                backgroundColor: colors['bg-secondary'],
-              }}>
-                {/* Table Header */}
-                <View style={{
-                  flexDirection: 'row',
-                  backgroundColor: isDark 
-                    ? (accent ? accent.primary + '30' : colors['bg-primary']) 
-                    : (accent ? accent.primary + '20' : colors['bg-secondary']),
-                  borderBottomWidth: 2,
-                  borderBottomColor: accent ? accent.primary : colors['border-default'],
-                }}>
-                  {tableColumns.map((column, index) => (
-                    <View
-                      key={column}
-                      style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 12,
-                        borderRightWidth: 1,
-                        borderRightColor: colors['border-default'],
-                        width: 120,
-                      }}
-                    >
-                      <Text style={{
-                        fontSize: 13,
-                        fontFamily: getFontFamily('semibold'),
-                        color: isDark 
-                          ? (accent ? accent.primary : colors['text-primary'])
-                          : (accent ? accent.primary : colors['text-primary']),
-                        textTransform: 'capitalize',
-                      }}>
-                        {FIELD_LABELS[column] || column}
-                      </Text>
-                    </View>
-                  ))}
-                  {/* Edit Column Header */}
-                  <View
-                    style={{
-                      paddingVertical: 12,
-                      paddingHorizontal: 12,
-                      width: 80,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text style={{
-                      fontSize: 13,
-                      fontFamily: getFontFamily('semibold'),
-                      color: isDark 
-                        ? (accent ? accent.primary : colors['text-primary'])
-                        : (accent ? accent.primary : colors['text-primary']),
-                    }}>
-                      Edit
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Table Rows */}
-                {tableRows.map((row, rowIndex) => {
-                  // Check if this row has existing data
-                  const hasData = metricsData.some(m => m.attempt_id === row.attempt_id);
-                  const existingMetric = metricsData.find(m => m.attempt_id === row.attempt_id);
-                  
-                  return (
-                  <View
-                    key={row.attempt_id}
-                    style={{
-                      flexDirection: 'row',
-                      borderBottomWidth: rowIndex < tableRows.length - 1 ? 1 : 0,
-                      borderBottomColor: colors['border-default'],
-                      backgroundColor: rowIndex % 2 === 0 ? colors['bg-secondary'] : colors['bg-card'],
-                    }}
-                  >
-                    {tableColumns.map((column, colIndex) => {
-                      const value = row[column];
-                      const isEmpty = value === null || value === undefined || value === '';
-                      
-                      return (
-                        <View
-                          key={column}
-                          style={{
-                            paddingVertical: 12,
-                            paddingHorizontal: 12,
-                            borderRightWidth: 1,
-                            borderRightColor: colors['border-default'],
-                            width: 120,
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {isEmpty ? (
-                            <Text style={{
-                              fontSize: 13,
-                              fontFamily: getFontFamily('regular'),
-                              color: colors['text-muted'],
-                              fontStyle: 'italic',
-                            }}>
-                              -
-                            </Text>
-                          ) : (
-                            <Text style={{
-                              fontSize: 13,
-                              fontFamily: getFontFamily('regular'),
-                              color: colors['text-primary'],
-                            }}>
-                              {column === 'time' && typeof value === 'number'
-                                ? formatTime(value)
-                                : column === 'is_success'
-                                ? value ? '✓' : '✗'
-                                : column === 'weight'
-                                ? `${value} kg`
-                                : String(value)}
-                            </Text>
-                          )}
-                        </View>
-                      );
-                    })}
-                    {/* Edit Column */}
-                    <View
-                      style={{
-                        paddingVertical: 12,
-                        paddingHorizontal: 12,
-                        borderRightWidth: 0,
-                        width: 80,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <TouchableOpacity
-                        onPress={() => {
-                          if (hasData && existingMetric) {
-                            // Edit mode: Set edit mode and selected metric
-                            setIsEditMode(true);
-                            setSelectedMetric(existingMetric);
-                            setShowMetricsModal(true);
-                          } else {
-                            // Add mode: Set attempt_id and open modal in add mode
-                            setIsEditMode(false);
-                            setSelectedMetric(null);
-                            setEditingAttemptId(null);
-                            // Set form values with the attempt_id for this row
-                            const initialValues: Record<string, any> = {
-                              is_success: true,
-                              attempt_id: row.attempt_id,
-                            };
-                            setFormValues(initialValues);
-                            setShowMetricsModal(true);
-                          }
-                        }}
-                        style={{
-                          padding: 8,
-                          borderRadius: 8,
-                          backgroundColor: accent ? accent.primary + '20' : colors['bg-secondary'],
-                        }}
-                      >
-                        <Ionicons 
-                          name={hasData && existingMetric ? "create-outline" : "add-outline"} 
-                          size={20} 
-                          color={accent ? accent.primary : colors['bg-primary']} 
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
           )}
         </View>
+
+        {isLoadingMetrics ? (
+          <SkeletonContainer count={metricsListData.length || 3} layout="metric" />
+        ) : metricsListData.length > 0 ? (
+          <FlatList
+            data={metricsListData}
+            renderItem={({ item }) => (
+              <MetricItem
+                metric={item.metric}
+                attemptId={item.attemptId}
+                hasData={item.hasData}
+                accent={accent}
+                isDark={isDark}
+                onEdit={(metric) => {
+                  setIsEditMode(true);
+                  setSelectedMetric(metric);
+                  setShowMetricsModal(true);
+                }}
+                onAdd={(attemptId) => {
+                  setIsEditMode(false);
+                  setSelectedMetric(null);
+                  setEditingAttemptId(null);
+                  const initialValues: Record<string, any> = {
+                    is_success: true,
+                    attempt_id: attemptId,
+                  };
+                  setFormValues(initialValues);
+                  setShowMetricsModal(true);
+                }}
+              />
+            )}
+            keyExtractor={(item) => `metric-${item.attemptId}`}
+            scrollEnabled={false}
+            removeClippedSubviews={true}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            ListEmptyComponent={
+              <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                <Ionicons name="stats-chart-outline" size={32} color={colors['text-muted']} />
+                <Text style={{
+                  fontSize: 13,
+                  fontFamily: getFontFamily('regular'),
+                  color: colors['text-secondary'],
+                  marginTop: 8,
+                }}>
+                  No metrics recorded yet
+                </Text>
+              </View>
+            }
+          />
+        ) : (
+          <View style={{ 
+            alignItems: 'center', 
+            paddingVertical: 40,
+            paddingHorizontal: 20,
+          }}>
+            <View style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              backgroundColor: colors['bg-secondary'],
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16,
+            }}>
+              <Ionicons name="stats-chart-outline" size={32} color={colors['text-muted']} />
+            </View>
+            <Text style={{
+              fontSize: 15,
+              fontFamily: getFontFamily('semibold'),
+              color: colors['text-primary'],
+              marginBottom: 4,
+            }}>
+              No metrics yet
+            </Text>
+            <Text style={{
+              fontSize: 13,
+              fontFamily: getFontFamily('regular'),
+              color: colors['text-secondary'],
+              textAlign: 'center',
+            }}>
+              Start tracking metrics by adding your first attempt
+            </Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -1296,54 +1175,8 @@ export default function EventParticipantDetailScreen() {
           )}
         </View>
 
-        {/* Activity History */}
-        <View style={{ marginBottom: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-            <Ionicons name="time-outline" size={18} color={accent ? accent.primary : colors['bg-primary']} />
-          <Text style={{
-              fontSize: 16,
-            fontFamily: getFontFamily('semibold'),
-              color: colors['text-primary'],
-              marginLeft: 8,
-          }}>
-            Activity History
-            </Text>
-            {sortedAttempts.length > 0 && (
-              <View style={{
-                marginLeft: 8,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-                borderRadius: 12,
-                backgroundColor: accent ? accent.primary + '20' : colors['bg-primary'] + '20',
-              }}>
-                <Text style={{
-                  fontSize: 11,
-                  fontFamily: getFontFamily('semibold'),
-                  color: accent ? accent.primary : colors['bg-primary'],
-                }}>
-                  {sortedAttempts.length}
-          </Text>
-              </View>
-            )}
-          </View>
-        </View>
-
         {isLoadingActivity ? (
-          <View style={{
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 60,
-          }}>
-            <ActivityIndicator size="large" color={accent?.primary || colors['bg-primary']} />
-            <Text style={{
-              fontSize: 14,
-              fontFamily: getFontFamily('medium'),
-              color: colors['text-secondary'],
-              marginTop: 12,
-            }}>
-              Loading activity...
-            </Text>
-          </View>
+          <SkeletonContainer count={3} layout="card" />
         ) : sortedAttempts.length > 0 ? (
           <FlatList
             data={sortedAttempts}
@@ -1394,7 +1227,7 @@ export default function EventParticipantDetailScreen() {
                     }
                     
                     // Handle reps field if it exists
-                    if (sourceData.reps !== undefined && sourceData.reps !== null) {
+                    if ('reps' in sourceData && sourceData.reps !== undefined && sourceData.reps !== null) {
                       formData.reps = sourceData.reps;
                     }
                     
