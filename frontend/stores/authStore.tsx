@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { authService, User } from '../services';
 import { Platform } from 'react-native';
+import { useTournamentStore } from './tournamentStore';
+import { useEventStore } from './eventStore';
+import { useEventTypesStore } from './eventTypesStore';
 
 interface AuthStore {
   isAuthenticated: boolean;
@@ -135,12 +138,23 @@ export const useAuthStore = create<AuthStore>()(
         try {
           await authService.logout();
         } finally {
+          // Clear all app data on logout
+          console.log('[AuthStore] Logging out - clearing all data...');
+          
+          // Reset all stores
+          useTournamentStore.getState().resetStore();
+          useEventStore.getState().resetStore();
+          useEventTypesStore.getState().resetStore();
+          
+          // Clear auth state
           set({ 
             isAuthenticated: false, 
             user: null,
             token: null,
             error: null 
           });
+          
+          console.log('[AuthStore] Logout complete - all data cleared');
         }
       },
 

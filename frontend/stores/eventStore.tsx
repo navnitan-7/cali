@@ -26,6 +26,9 @@ interface EventStore {
   isLoading: boolean;
   error: string | null;
   
+  // Reset store (for logout)
+  resetStore: () => void;
+  
   // Backend sync methods
   syncEventsFromBackend: () => Promise<void>;
   syncParticipantsFromBackend: (eventId: string) => Promise<void>;
@@ -122,6 +125,15 @@ export const useEventStore = create<EventStore>()(
       events: getDefaultEvents(),
       isLoading: false,
       error: null,
+      
+      resetStore: () => {
+        console.log('[EventStore] Resetting store...');
+        set({
+          events: getDefaultEvents(),
+          isLoading: false,
+          error: null,
+        });
+      },
       
       // Sync events from backend
       syncEventsFromBackend: async () => {

@@ -90,6 +90,9 @@ interface TournamentStore {
   syncParticipantsPromise: Promise<void> | null;
   syncEventDetailsPromises: Record<string, Promise<void>>; // eventId -> promise
   
+  // Reset store (for logout)
+  resetStore: () => void;
+  
   syncEventsFromBackend: () => Promise<void>;
   syncEventsOnly: (tournamentId: string) => Promise<void>;
   syncParticipantsOnly: (tournamentId: string) => Promise<void>;
@@ -200,6 +203,19 @@ export const useTournamentStore = create<TournamentStore>()(
       syncEventsPromise: null,
       syncParticipantsPromise: null,
       syncEventDetailsPromises: {},
+      
+      resetStore: () => {
+        console.log('[TournamentStore] Resetting store...');
+        set({
+          tournaments: getDefaultTournaments(),
+          isLoadingEvents: false,
+          isLoadingParticipants: false,
+          isLoadingEventDetails: {},
+          syncEventsPromise: null,
+          syncParticipantsPromise: null,
+          syncEventDetailsPromises: {},
+        });
+      },
       
       syncEventsFromBackend: async () => {
         // If already syncing, return the existing promise
