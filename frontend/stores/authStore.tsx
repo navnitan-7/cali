@@ -10,6 +10,8 @@ interface AuthStore {
   isAuthenticated: boolean;
   user: User | null;
   token: string | null;
+  refreshToken: string | null;
+  tokenExpiresAt: number | null;
   isLoading: boolean;
   error: string | null;
   isAdmin: () => boolean;
@@ -81,6 +83,8 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       user: null,
       token: null,
+      refreshToken: null,
+      tokenExpiresAt: null,
       isLoading: false,
       error: null,
 
@@ -95,7 +99,7 @@ export const useAuthStore = create<AuthStore>()(
           set({ isLoading: true, error: null });
           console.log('[AuthStore] Calling authService.login...');
           const tokenResponse = await authService.login({ name, password });
-          console.log('[AuthStore] Token received, fetching user data...');
+          console.log('[AuthStore] Tokens received, fetching user data...');
           const user = await authService.getCurrentUser();
           console.log('[AuthStore] Login complete, user:', user.name);
           
@@ -103,6 +107,8 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: true, 
             user,
             token: tokenResponse.access_token,
+            refreshToken: tokenResponse.refresh_token,
+            tokenExpiresAt: Date.now() + tokenResponse.expires_in * 1000,
             isLoading: false 
           });
           return true;
@@ -113,6 +119,8 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: false, 
             user: null,
             token: null,
+            refreshToken: null,
+            tokenExpiresAt: null,
             error: errorMessage,
             isLoading: false 
           });
@@ -157,6 +165,8 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: false, 
             user: null,
             token: null,
+            refreshToken: null,
+            tokenExpiresAt: null,
             error: null 
           });
           
@@ -167,13 +177,17 @@ export const useAuthStore = create<AuthStore>()(
       checkAuth: async () => {
         try {
           const token = await authService.getStoredToken();
+          const refreshToken = await authService.getStoredRefreshToken();
+          const tokenExpiresAt = await authService.getTokenExpiresAt();
           
           // Only check auth status if we have a token
           if (!token) {
             set({ 
               isAuthenticated: false, 
               user: null,
-              token: null 
+              token: null,
+              refreshToken: null,
+              tokenExpiresAt: null 
             });
             return;
           }
@@ -184,7 +198,9 @@ export const useAuthStore = create<AuthStore>()(
             set({ 
               isAuthenticated: true, 
               user,
-              token 
+              token,
+              refreshToken,
+              tokenExpiresAt 
             });
           } catch (error: any) {
             // Token is invalid or expired, clear auth state silently
@@ -195,7 +211,9 @@ export const useAuthStore = create<AuthStore>()(
             set({ 
               isAuthenticated: false, 
               user: null,
-              token: null 
+              token: null,
+              refreshToken: null,
+              tokenExpiresAt: null 
             });
             // Clear invalid token from storage
             await authService.logout();
@@ -205,7 +223,9 @@ export const useAuthStore = create<AuthStore>()(
           set({ 
             isAuthenticated: false, 
             user: null,
-            token: null 
+            token: null,
+            refreshToken: null,
+            tokenExpiresAt: null 
           });
         }
       },

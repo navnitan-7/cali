@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from utils.db import db
-from utils.auth import hash_password, verify_password, create_access_token, decode_access_token
+from utils.auth import (
+    hash_password, verify_password, create_access_token, decode_access_token,
+    create_refresh_token, decode_refresh_token, ACCESS_TOKEN_EXPIRE_MINUTES
+)
 from utils.variables import UserRegister, UserLogin, Token
 from datetime import timedelta
 import logging
@@ -25,12 +28,24 @@ async def login(user: UserLogin):
         if not await verify_password(user.password, db_user["password"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
+        token_data = {"sub": db_user["name"], "user_id": db_user["id"]}
+        
         access_token = await create_access_token(
-            data={"sub": db_user["name"], "user_id": db_user["id"]},
-            expires_delta=timedelta(minutes=30)
+            data=token_data,
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
         
-        return {"access_token": access_token, "token_type": "bearer"}
+        refresh_token = await create_refresh_token(
+            data=token_data,
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
+        }
     except HTTPException:
         # Re-raise HTTP exceptions (like 401) as-is
         raise

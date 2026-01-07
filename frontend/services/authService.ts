@@ -14,7 +14,9 @@ export interface UserLoginData {
 
 export interface TokenResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
+  expires_in: number;  // expiry in seconds
 }
 
 export interface User {
@@ -91,11 +93,13 @@ class AuthService {
     console.log('[AuthService] Attempting login for:', data.name);
     try {
       const response = await apiClient.post<TokenResponse>('/auth/login', data);
-      console.log('[AuthService] Login successful, received token');
-      const { access_token, token_type } = response.data;
+      console.log('[AuthService] Login successful, received tokens');
+      const { access_token, refresh_token, token_type, expires_in } = response.data;
       
       await storage.setItem('auth_token', access_token);
+      await storage.setItem('refresh_token', refresh_token);
       await storage.setItem('token_type', token_type);
+      await storage.setItem('token_expires_at', String(Date.now() + expires_in * 1000));
       
       return response.data;
     } catch (error: any) {
@@ -130,7 +134,24 @@ class AuthService {
 
   async logout(): Promise<void> {
     await storage.removeItem('auth_token');
+    await storage.removeItem('refresh_token');
     await storage.removeItem('token_type');
+    await storage.removeItem('token_expires_at');
+  }
+
+  async getStoredRefreshToken(): Promise<string | null> {
+    return await storage.getItem('refresh_token');
+  }
+
+  async getTokenExpiresAt(): Promise<number | null> {
+    const expiresAt = await storage.getItem('token_expires_at');
+    return expiresAt ? parseInt(expiresAt, 10) : null;
+  }
+
+  async isTokenExpired(): Promise<boolean> {
+    const expiresAt = await this.getTokenExpiresAt();
+    if (!expiresAt) return true;
+    return Date.now() >= expiresAt;
   }
 
   async getCurrentUser(): Promise<User> {
