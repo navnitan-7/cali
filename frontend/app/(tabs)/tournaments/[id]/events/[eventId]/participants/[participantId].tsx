@@ -848,6 +848,7 @@ export default function EventParticipantDetailScreen() {
           {item.type === 'metric' && (
             <TouchableOpacity
               onPress={() => onEdit(item.id)}
+              delayPressIn={100}
               style={{
                 padding: 8,
                 borderRadius: 8,

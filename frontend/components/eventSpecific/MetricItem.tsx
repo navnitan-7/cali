@@ -94,6 +94,7 @@ const MetricItem = React.memo(({
   return (
     <TouchableOpacity
       activeOpacity={0.7}
+      delayPressIn={100}
       style={{
         borderRadius: 12,
         padding: 14,

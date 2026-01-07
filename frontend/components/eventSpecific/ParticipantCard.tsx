@@ -109,7 +109,7 @@ export default function ParticipantCard({
 
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7} delayPressIn={100}>
         <CardContent />
       </TouchableOpacity>
     );
