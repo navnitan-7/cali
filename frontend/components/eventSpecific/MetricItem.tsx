@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/utils/colors';
 import { getFontFamily } from '@/utils/fonts';
@@ -39,6 +39,14 @@ const MetricItem = React.memo(({
   const accentColor = accent?.primary || colors['bg-primary'];
 
   const getFieldIcon = (field: string) => FIELD_ICONS[field] || 'ellipse-outline';
+
+  const handlePress = useCallback(() => {
+    if (hasData && metric) {
+      onEdit(metric);
+    } else {
+      onAdd(attemptId);
+    }
+  }, [hasData, metric, onEdit, onAdd, attemptId]);
 
   const renderField = (field: string, value: any) => {
     if (value === undefined || value === null || value === '') return null;
@@ -91,19 +99,18 @@ const MetricItem = React.memo(({
     );
   };
 
-  return (
-    <TouchableOpacity
-      activeOpacity={0.7}
-      style={{
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 8,
-        backgroundColor: colors['bg-card'],
-        borderWidth: 1,
-        borderColor: colors['border-default'],
-      }}
-      onPress={() => hasData && metric ? onEdit(metric) : onAdd(attemptId)}
-    >
+  const cardStyle = {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    backgroundColor: colors['bg-card'],
+    borderWidth: 1,
+    borderColor: colors['border-default'],
+  };
+
+  // Card content - shared between web and native
+  const cardContent = (
+    <>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
           <Ionicons 
@@ -168,6 +175,34 @@ const MetricItem = React.memo(({
           </Text>
         </View>
       )}
+    </>
+  );
+
+  // On web, use a View with onClick to avoid touch event conflicts with scrolling
+  if (Platform.OS === 'web') {
+    return (
+      <View
+        style={{
+          ...cardStyle,
+          cursor: 'pointer',
+        } as any}
+        // @ts-ignore - web-specific onClick prop
+        onClick={handlePress}
+      >
+        {cardContent}
+      </View>
+    );
+  }
+
+  // On native, use TouchableOpacity with delayPressIn for scroll-friendly behavior
+  return (
+    <TouchableOpacity
+      activeOpacity={0.7}
+      delayPressIn={100}
+      style={cardStyle}
+      onPress={handlePress}
+    >
+      {cardContent}
     </TouchableOpacity>
   );
 });
@@ -175,4 +210,3 @@ const MetricItem = React.memo(({
 MetricItem.displayName = 'MetricItem';
 
 export default MetricItem;
-

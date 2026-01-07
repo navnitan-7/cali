@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../stores/themeStore';
 import { useColors } from '../../utils/colors';
@@ -108,8 +108,26 @@ export default function ParticipantCard({
   );
 
   if (onPress) {
+    // On web, use a View with onClick to avoid touch event conflicts with scrolling
+    if (Platform.OS === 'web') {
+      return (
+        <View
+          style={{ cursor: 'pointer' } as any}
+          // @ts-ignore - web-specific onClick prop
+          onClick={onPress}
+        >
+          <CardContent />
+        </View>
+      );
+    }
+
+    // On native, use TouchableOpacity with delayPressIn for scroll-friendly behavior
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+      <TouchableOpacity 
+        onPress={onPress} 
+        activeOpacity={0.7} 
+        delayPressIn={100}
+      >
         <CardContent />
       </TouchableOpacity>
     );

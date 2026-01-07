@@ -7,6 +7,7 @@ interface EventTypesStore {
   eventTypes: EventType[];
   isLoading: boolean;
   lastFetched: number | null;
+  resetStore: () => void;
   fetchEventTypes: () => Promise<void>;
   getCachedEventTypes: () => EventType[];
 }
@@ -65,6 +66,15 @@ export const useEventTypesStore = create<EventTypesStore>()(
       eventTypes: [],
       isLoading: false,
       lastFetched: null,
+
+      resetStore: () => {
+        console.log('[EventTypesStore] Resetting store...');
+        set({
+          eventTypes: [],
+          isLoading: false,
+          lastFetched: null,
+        });
+      },
 
       fetchEventTypes: async () => {
         const state = get();

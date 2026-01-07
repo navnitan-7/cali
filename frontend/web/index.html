@@ -16,6 +16,23 @@
         display: flex;
         flex-direction: column;
       }
+      
+      /* Fix touch scrolling on mobile web browsers */
+      /* Allow scrolling through any element with role="button" */
+      [role="button"] {
+        touch-action: manipulation;
+      }
+      
+      /* Ensure all scrollable areas work on mobile */
+      * {
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      /* Allow vertical scrolling in scrollable containers */
+      [data-focusable="true"],
+      [tabindex] {
+        touch-action: pan-y pinch-zoom;
+      }
     </style>
   </head>
   <body>

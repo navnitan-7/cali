@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Pressable, ActivityIndicator, RefreshControl, Alert, TextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -33,6 +33,7 @@ export default function EventDetailScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const tournament = tournamentId ? getTournament(tournamentId) : undefined;
   const event = tournamentId && eventId ? getEvent(tournamentId, eventId) : undefined;
@@ -105,6 +106,15 @@ export default function EventDetailScreen() {
       }));
   }, [tournament, event, tournamentId, eventId, getEventParticipantData]);
 
+  // Filter participants based on search query
+  const filteredParticipants = useMemo(() => {
+    if (!searchQuery.trim()) return eventParticipants;
+    const query = searchQuery.toLowerCase().trim();
+    return eventParticipants.filter(p => 
+      p.name.toLowerCase().includes(query)
+    );
+  }, [eventParticipants, searchQuery]);
+
   // Calculate leaderboard (ranked by best metrics)
   const leaderboard = useMemo(() => {
     if (!eventParticipants.length) return [];
@@ -164,6 +174,47 @@ export default function EventDetailScreen() {
     
     return (
       <View style={{ paddingBottom: insets.bottom + 100 }}>
+        {/* Search Input */}
+        {eventParticipants.length > 0 && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors['bg-card'],
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: searchQuery ? (accent?.primary || colors['bg-primary']) : colors['border-default'],
+          }}>
+            <Ionicons 
+              name="search" 
+              size={18} 
+              color={searchQuery ? (accent?.primary || colors['bg-primary']) : colors['text-muted']} 
+            />
+            <TextInput
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                paddingHorizontal: 10,
+                fontSize: 15,
+                fontFamily: getFontFamily('regular'),
+                color: colors['text-primary'],
+              }}
+              placeholder="Search participants..."
+              placeholderTextColor={colors['text-muted']}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+                <Ionicons name="close-circle" size={18} color={colors['text-muted']} />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+        
         {isLoading ? (
           <SkeletonContainer count={4} layout="participant" />
         ) : eventParticipants.length === 0 ? (
@@ -182,8 +233,24 @@ export default function EventDetailScreen() {
             No participants yet
           </Text>
         </View>
+      ) : filteredParticipants.length === 0 ? (
+        <View style={{
+          alignItems: 'center',
+          justifyContent: 'center',
+          paddingVertical: 40,
+        }}>
+          <Ionicons name="search-outline" size={36} color={colors['text-muted']} />
+          <Text style={{
+            fontSize: 15,
+            fontFamily: getFontFamily('medium'),
+            color: colors['text-secondary'],
+            marginTop: 12,
+          }}>
+            No participants match "{searchQuery}"
+          </Text>
+        </View>
       ) : (
-        eventParticipants.map((participant) => {
+        filteredParticipants.map((participant) => {
           const eventData = participant.eventData;
           return (
             <TouchableOpacity
@@ -573,10 +640,17 @@ export default function EventDetailScreen() {
           <TabSwitch
             tabs={['Participants', 'Leaderboard']}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={(tab) => {
+              setActiveTab(tab);
+              // Clear search when switching tabs
+              if (tab !== 'Participants') setSearchQuery('');
+            }}
             style="underline"
             accentColor={accent?.primary}
-            counts={[eventParticipants.length, undefined]}
+            counts={[
+              searchQuery ? filteredParticipants.length : eventParticipants.length, 
+              undefined
+            ]}
           />
 
           {/* Subtle Accent Divider */}

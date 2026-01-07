@@ -848,6 +848,7 @@ export default function EventParticipantDetailScreen() {
           {item.type === 'metric' && (
             <TouchableOpacity
               onPress={() => onEdit(item.id)}
+              delayPressIn={100}
               style={{
                 padding: 8,
                 borderRadius: 8,
@@ -1056,10 +1057,11 @@ export default function EventParticipantDetailScreen() {
         {isLoadingMetrics ? (
           <SkeletonContainer count={metricsListData.length || 3} layout="metric" />
         ) : metricsListData.length > 0 ? (
-          <FlatList
-            data={metricsListData}
-            renderItem={({ item }) => (
+          // Use simple View with map on web to avoid FlatList touch event conflicts
+          <View>
+            {metricsListData.map((item) => (
               <MetricItem
+                key={`metric-${item.attemptId}`}
                 metric={item.metric}
                 attemptId={item.attemptId}
                 hasData={item.hasData}
@@ -1082,27 +1084,8 @@ export default function EventParticipantDetailScreen() {
                   setShowMetricsModal(true);
                 }}
               />
-            )}
-            keyExtractor={(item) => `metric-${item.attemptId}`}
-            scrollEnabled={false}
-            removeClippedSubviews={true}
-            initialNumToRender={10}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-            ListEmptyComponent={
-              <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                <Ionicons name="stats-chart-outline" size={32} color={colors['text-muted']} />
-                <Text style={{
-                  fontSize: 13,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                  marginTop: 8,
-                }}>
-                  No metrics recorded yet
-                </Text>
-              </View>
-            }
-          />
+            ))}
+          </View>
         ) : (
           <View style={{ 
             alignItems: 'center', 
@@ -1713,7 +1696,13 @@ export default function EventParticipantDetailScreen() {
         </View>
 
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ 
+            flex: 1,
+            ...(Platform.OS === 'web' && { 
+              // Web-specific: ensure smooth scrolling on mobile
+              WebkitOverflowScrolling: 'touch',
+            }),
+          } as any}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
           showsVerticalScrollIndicator={false}
         >
