@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../stores/themeStore';
 import { useColors } from '../../utils/colors';
@@ -107,9 +107,21 @@ export default function ParticipantCard({
     </View>
   );
 
+  // Web-specific styles to allow scrolling through this element
+  const webStyles = Platform.OS === 'web' ? {
+    cursor: 'pointer',
+    touchAction: 'pan-y',
+    userSelect: 'none',
+  } : {};
+
   if (onPress) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.7} delayPressIn={100}>
+      <TouchableOpacity 
+        onPress={onPress} 
+        activeOpacity={0.7} 
+        delayPressIn={100}
+        style={webStyles as any}
+      >
         <CardContent />
       </TouchableOpacity>
     );

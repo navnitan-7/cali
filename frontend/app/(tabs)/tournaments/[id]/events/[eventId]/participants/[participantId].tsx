@@ -1714,7 +1714,13 @@ export default function EventParticipantDetailScreen() {
         </View>
 
         <ScrollView
-          style={{ flex: 1 }}
+          style={{ 
+            flex: 1,
+            ...(Platform.OS === 'web' && { 
+              // Web-specific: ensure smooth scrolling on mobile
+              WebkitOverflowScrolling: 'touch',
+            }),
+          } as any}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}
           showsVerticalScrollIndicator={false}
         >

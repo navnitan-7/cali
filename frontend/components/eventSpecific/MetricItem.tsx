@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColors } from '@/utils/colors';
 import { getFontFamily } from '@/utils/fonts';
@@ -91,6 +91,13 @@ const MetricItem = React.memo(({
     );
   };
 
+  // Web-specific styles to allow scrolling through this element
+  const webStyles = Platform.OS === 'web' ? {
+    cursor: 'pointer',
+    touchAction: 'pan-y',
+    userSelect: 'none',
+  } : {};
+
   return (
     <TouchableOpacity
       activeOpacity={0.7}
@@ -102,7 +109,8 @@ const MetricItem = React.memo(({
         backgroundColor: colors['bg-card'],
         borderWidth: 1,
         borderColor: colors['border-default'],
-      }}
+        ...webStyles,
+      } as any}
       onPress={() => hasData && metric ? onEdit(metric) : onAdd(attemptId)}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
