@@ -1057,10 +1057,11 @@ export default function EventParticipantDetailScreen() {
         {isLoadingMetrics ? (
           <SkeletonContainer count={metricsListData.length || 3} layout="metric" />
         ) : metricsListData.length > 0 ? (
-          <FlatList
-            data={metricsListData}
-            renderItem={({ item }) => (
+          // Use simple View with map on web to avoid FlatList touch event conflicts
+          <View>
+            {metricsListData.map((item) => (
               <MetricItem
+                key={`metric-${item.attemptId}`}
                 metric={item.metric}
                 attemptId={item.attemptId}
                 hasData={item.hasData}
@@ -1083,27 +1084,8 @@ export default function EventParticipantDetailScreen() {
                   setShowMetricsModal(true);
                 }}
               />
-            )}
-            keyExtractor={(item) => `metric-${item.attemptId}`}
-            scrollEnabled={false}
-            removeClippedSubviews={true}
-            initialNumToRender={10}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-            ListEmptyComponent={
-              <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                <Ionicons name="stats-chart-outline" size={32} color={colors['text-muted']} />
-                <Text style={{
-                  fontSize: 13,
-                  fontFamily: getFontFamily('regular'),
-                  color: colors['text-secondary'],
-                  marginTop: 8,
-                }}>
-                  No metrics recorded yet
-                </Text>
-              </View>
-            }
-          />
+            ))}
+          </View>
         ) : (
           <View style={{ 
             alignItems: 'center', 
