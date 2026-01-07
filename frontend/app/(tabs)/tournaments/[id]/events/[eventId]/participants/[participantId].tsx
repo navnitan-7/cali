@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Platform, ActivityIndicator, Switch, Modal, Pressable, FlatList, KeyboardAvoidingView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Platform, ActivityIndicator, Switch, Modal, Pressable, FlatList, KeyboardAvoidingView, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/stores/themeStore';
 import { useColors } from '@/utils/colors';
 import { getFontFamily } from '@/utils/fonts';
@@ -435,8 +436,129 @@ export default function EventParticipantDetailScreen() {
   // Alias for backward compatibility
   const secondsToTimeString = millisecondsToTimeString;
 
-  const handleAddVideo = () => {
-    Alert.alert('Coming Soon', 'Video upload functionality will be available soon');
+  const openWhatsAppWithVideo = useCallback(() => {
+    // Construct message with participant name and category
+    const participantName = participant?.name || 'Unknown Participant';
+    const category = event?.category || event?.name || 'Unknown Category';
+    const tournamentName = tournament?.name || 'Unknown Tournament';
+    
+    const message = `🎥 Video Submission\n\n` +
+      `📋 Participant: ${participantName}\n` +
+      `🏆 Category: ${category}\n` +
+      `🎯 Tournament: ${tournamentName}\n\n` +
+      `Please share the video in this group.`;
+    
+    // Encode the message for URL
+    const encodedMessage = encodeURIComponent(message);
+    
+    // On web, use WhatsApp Web URL directly
+    if (Platform.OS === 'web') {
+      const webWhatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+      window.open(webWhatsappUrl, '_blank');
+      return;
+    }
+    
+    // On native, try WhatsApp app first
+    const whatsappUrl = `whatsapp://send?text=${encodedMessage}`;
+    
+    Linking.canOpenURL(whatsappUrl)
+      .then((supported) => {
+        if (supported) {
+          return Linking.openURL(whatsappUrl);
+        } else {
+          // Fallback to web WhatsApp
+          const webWhatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+          return Linking.openURL(webWhatsappUrl);
+        }
+      })
+      .catch((error) => {
+        console.error('Error opening WhatsApp:', error);
+        Alert.alert(
+          'WhatsApp Not Available',
+          'Could not open WhatsApp. Please make sure WhatsApp is installed on your device.',
+          [{ text: 'OK' }]
+        );
+      });
+  }, [participant?.name, event?.category, event?.name, tournament?.name]);
+
+  const handleAddVideo = async () => {
+    // On web, use file input for video selection
+    if (Platform.OS === 'web') {
+      // Create a hidden file input for video
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'video/*';
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          // Video selected, open WhatsApp
+          openWhatsAppWithVideo();
+        }
+      };
+      input.click();
+      return;
+    }
+
+    // Native platform handling
+    try {
+      // Request permission to access media library
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your media library to upload videos.');
+        return;
+      }
+
+      // Show options to pick video from library or record new
+      Alert.alert(
+        'Add Video',
+        'Choose how you want to add a video',
+        [
+          {
+            text: 'Record Video',
+            onPress: async () => {
+              const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
+              if (cameraStatus.status !== 'granted') {
+                Alert.alert('Permission Required', 'Please allow camera access to record videos.');
+                return;
+              }
+              
+              const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['videos'],
+                allowsEditing: true,
+                quality: 1,
+                videoMaxDuration: 300, // 5 minutes max
+              });
+
+              if (!result.canceled && result.assets?.[0]) {
+                openWhatsAppWithVideo();
+              }
+            },
+          },
+          {
+            text: 'Choose from Library',
+            onPress: async () => {
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['videos'],
+                allowsEditing: true,
+                quality: 1,
+              });
+
+              if (!result.canceled && result.assets?.[0]) {
+                openWhatsAppWithVideo();
+              }
+            },
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error picking video:', error);
+      Alert.alert('Error', 'Failed to pick video. Please try again.');
+    }
   };
 
   // Get metrics fields - include all required fields (including attempt_id)
