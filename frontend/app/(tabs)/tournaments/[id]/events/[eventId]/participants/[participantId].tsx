@@ -42,6 +42,8 @@ export default function EventParticipantDetailScreen() {
   const [isLoadingMetrics, setIsLoadingMetrics] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<ActivityMetric | null>(null);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [selectedVideoName, setSelectedVideoName] = useState<string | null>(null);
   
   const { eventTypes } = useEventTypesStore();
   const { addActivity, updateActivity, getMetrics } = useActivityApi();
@@ -436,25 +438,29 @@ export default function EventParticipantDetailScreen() {
   // Alias for backward compatibility
   const secondsToTimeString = millisecondsToTimeString;
 
-  const openWhatsAppWithVideo = useCallback(() => {
+  const getWhatsAppMessage = useCallback(() => {
     // Construct message with participant name and category
     const participantName = participant?.name || 'Unknown Participant';
     const category = event?.category || event?.name || 'Unknown Category';
     const tournamentName = tournament?.name || 'Unknown Tournament';
     
-    const message = `🎥 Video Submission\n\n` +
+    return `🎥 Video Submission\n\n` +
       `📋 Participant: ${participantName}\n` +
       `🏆 Category: ${category}\n` +
       `🎯 Tournament: ${tournamentName}\n\n` +
-      `Please share the video in this group.`;
-    
-    // Encode the message for URL
+      `⚠️ Please attach the video file to this message before sending.`;
+  }, [participant?.name, event?.category, event?.name, tournament?.name]);
+
+  const openWhatsAppWithVideo = useCallback(() => {
+    const message = getWhatsAppMessage();
     const encodedMessage = encodeURIComponent(message);
     
     // On web, use WhatsApp Web URL directly
     if (Platform.OS === 'web') {
       const webWhatsappUrl = `https://wa.me/?text=${encodedMessage}`;
       window.open(webWhatsappUrl, '_blank');
+      setShowWhatsAppModal(false);
+      setSelectedVideoName(null);
       return;
     }
     
@@ -479,7 +485,10 @@ export default function EventParticipantDetailScreen() {
           [{ text: 'OK' }]
         );
       });
-  }, [participant?.name, event?.category, event?.name, tournament?.name]);
+    
+    setShowWhatsAppModal(false);
+    setSelectedVideoName(null);
+  }, [getWhatsAppMessage]);
 
   const handleAddVideo = async () => {
     // On web, use file input for video selection
@@ -491,8 +500,9 @@ export default function EventParticipantDetailScreen() {
       input.onchange = (e) => {
         const file = (e.target as HTMLInputElement).files?.[0];
         if (file) {
-          // Video selected, open WhatsApp
-          openWhatsAppWithVideo();
+          // Video selected, show confirmation modal
+          setSelectedVideoName(file.name);
+          setShowWhatsAppModal(true);
         }
       };
       input.click();
@@ -531,7 +541,9 @@ export default function EventParticipantDetailScreen() {
               });
 
               if (!result.canceled && result.assets?.[0]) {
-                openWhatsAppWithVideo();
+                const fileName = result.assets[0].uri.split('/').pop() || 'Video';
+                setSelectedVideoName(fileName);
+                setShowWhatsAppModal(true);
               }
             },
           },
@@ -545,7 +557,9 @@ export default function EventParticipantDetailScreen() {
               });
 
               if (!result.canceled && result.assets?.[0]) {
-                openWhatsAppWithVideo();
+                const fileName = result.assets[0].uri.split('/').pop() || 'Video';
+                setSelectedVideoName(fileName);
+                setShowWhatsAppModal(true);
               }
             },
           },
@@ -560,6 +574,182 @@ export default function EventParticipantDetailScreen() {
       Alert.alert('Error', 'Failed to pick video. Please try again.');
     }
   };
+
+  // Render WhatsApp Share Modal
+  const renderWhatsAppModal = () => (
+    <Modal
+      visible={showWhatsAppModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => {
+        setShowWhatsAppModal(false);
+        setSelectedVideoName(null);
+      }}
+    >
+      <Pressable
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          padding: 20,
+        }}
+        onPress={() => {
+          setShowWhatsAppModal(false);
+          setSelectedVideoName(null);
+        }}
+      >
+        <Pressable
+          style={{
+            backgroundColor: colors['bg-card'],
+            borderRadius: 16,
+            padding: 24,
+            width: '100%',
+            maxWidth: 400,
+          }}
+          onPress={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <View style={{ alignItems: 'center', marginBottom: 20 }}>
+            <View style={{
+              width: 60,
+              height: 60,
+              borderRadius: 30,
+              backgroundColor: '#25D366' + '20',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 16,
+            }}>
+              <Ionicons name="logo-whatsapp" size={32} color="#25D366" />
+            </View>
+            <Text style={{
+              fontSize: 18,
+              fontFamily: getFontFamily('semibold'),
+              color: colors['text-primary'],
+              textAlign: 'center',
+            }}>
+              Share to WhatsApp
+            </Text>
+          </View>
+
+          {/* Video Info */}
+          {selectedVideoName && (
+            <View style={{
+              backgroundColor: colors['bg-secondary'],
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}>
+              <Ionicons name="videocam" size={20} color={accent?.primary || colors['bg-primary']} style={{ marginRight: 10 }} />
+              <Text style={{
+                fontSize: 14,
+                fontFamily: getFontFamily('medium'),
+                color: colors['text-primary'],
+                flex: 1,
+              }} numberOfLines={1}>
+                {selectedVideoName}
+              </Text>
+              <Ionicons name="checkmark-circle" size={20} color="#25D366" />
+            </View>
+          )}
+
+          {/* Message Preview */}
+          <View style={{
+            backgroundColor: colors['bg-secondary'],
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 16,
+          }}>
+            <Text style={{
+              fontSize: 12,
+              fontFamily: getFontFamily('medium'),
+              color: colors['text-secondary'],
+              marginBottom: 8,
+            }}>
+              Message Preview:
+            </Text>
+            <Text style={{
+              fontSize: 13,
+              fontFamily: getFontFamily('regular'),
+              color: colors['text-primary'],
+              lineHeight: 20,
+            }}>
+              {getWhatsAppMessage()}
+            </Text>
+          </View>
+
+          {/* Instructions */}
+          <View style={{
+            backgroundColor: '#FFF3CD',
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 20,
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+          }}>
+            <Ionicons name="information-circle" size={18} color="#856404" style={{ marginRight: 8, marginTop: 2 }} />
+            <Text style={{
+              fontSize: 12,
+              fontFamily: getFontFamily('regular'),
+              color: '#856404',
+              flex: 1,
+              lineHeight: 18,
+            }}>
+              WhatsApp will open with the message. You'll need to manually attach the video file before sending.
+            </Text>
+          </View>
+
+          {/* Buttons */}
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowWhatsAppModal(false);
+                setSelectedVideoName(null);
+              }}
+              style={{
+                flex: 1,
+                paddingVertical: 14,
+                borderRadius: 12,
+                backgroundColor: colors['bg-secondary'],
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{
+                fontSize: 15,
+                fontFamily: getFontFamily('semibold'),
+                color: colors['text-primary'],
+              }}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={openWhatsAppWithVideo}
+              style={{
+                flex: 1,
+                paddingVertical: 14,
+                borderRadius: 12,
+                backgroundColor: '#25D366',
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="logo-whatsapp" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={{
+                fontSize: 15,
+                fontFamily: getFontFamily('semibold'),
+                color: '#fff',
+              }}>
+                Open WhatsApp
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
 
   // Get metrics fields - include all required fields (including attempt_id)
   const metricsFields = useMemo(() => {
@@ -1901,6 +2091,9 @@ export default function EventParticipantDetailScreen() {
       
       {/* Add Activity Modal */}
       {renderAddActivityModal()}
+      
+      {/* WhatsApp Share Modal */}
+      {renderWhatsAppModal()}
     </SafeAreaView>
   );
 }
