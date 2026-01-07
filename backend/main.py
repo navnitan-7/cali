@@ -5,7 +5,6 @@ from app.events import events
 from app.activity import activity
 from app.auth import auth
 from app.video_judge import video_judge
-from app.video_upload import video_upload
 
 app = FastAPI(
     title="Street Lifting Competition API",
@@ -26,7 +25,6 @@ app.include_router(events.router)
 app.include_router(activity.router)
 app.include_router(auth.router)
 app.include_router(video_judge.router)
-app.include_router(video_upload.router)
 
 @app.get("/")
 async def read_root():

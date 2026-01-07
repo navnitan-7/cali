@@ -9,7 +9,7 @@ ACTIVITY_FIELDS_BY_EVENT = {
     1: ["attempt_id", "time", "is_success"],
     2: ["attempt_id", "weight", "type_of_activity", "is_success"],
     3: ["attempt_id", "time", "type_of_activity", "is_success"],
-    4: ["attempt_id", "time", "type_of_activity", "is_success"]
+    4: ["attempt_id", "reps", "type_of_activity", "is_success"]
 }
 
 MAX_ATTEMPTS_PER_EVENT = {
@@ -55,6 +55,9 @@ async def add_activity(activity: Activity, current_user: dict = Depends(get_curr
     if "is_success" in required_fields and activity.is_success is None:
         raise HTTPException(status_code=400, detail="is_success is required for this event")
     
+    if "reps" in required_fields and activity.reps is None:
+        raise HTTPException(status_code=400, detail="reps is required for this event")
+    
     db.execute_action("INSERT INTO cali_db.activity (event_id, participant_id, attempt_id, weight, type_of_activity, reps, time, is_success, is_deleted) VALUES (:event_id, :participant_id, :attempt_id, :weight, :type_of_activity, :reps, :time, :is_success, :is_deleted)", {"event_id": activity.event_id, "participant_id": activity.participant_id, "attempt_id": activity.attempt_id, "weight": activity.weight, "type_of_activity": activity.type_of_activity, "reps": activity.reps, "time": activity.time, "is_success": activity.is_success, "is_deleted": activity.is_deleted})
     return {"message": "Activity added successfully"}
 
@@ -87,5 +90,8 @@ async def update_activity(activity: Activity, current_user: dict = Depends(get_c
     if "is_success" in required_fields and activity.is_success is None:
         raise HTTPException(status_code=400, detail="is_success is required for this event")
     
-    db.execute_action("UPDATE cali_db.activity SET time = :time, weight = :weight, type_of_activity = :type_of_activity, is_success = :is_success WHERE event_id = :event_id AND participant_id = :participant_id AND attempt_id = :attempt_id", {"event_id": activity.event_id, "participant_id": activity.participant_id, "attempt_id": activity.attempt_id, "time": activity.time, "weight": activity.weight, "type_of_activity": activity.type_of_activity, "is_success": activity.is_success})
+    if "reps" in required_fields and activity.reps is None:
+        raise HTTPException(status_code=400, detail="reps is required for this event")
+    
+    db.execute_action("UPDATE cali_db.activity SET time = :time, weight = :weight, type_of_activity = :type_of_activity, reps = :reps, is_success = :is_success WHERE event_id = :event_id AND participant_id = :participant_id AND attempt_id = :attempt_id", {"event_id": activity.event_id, "participant_id": activity.participant_id, "attempt_id": activity.attempt_id, "time": activity.time, "weight": activity.weight, "type_of_activity": activity.type_of_activity, "reps": activity.reps, "is_success": activity.is_success})
     return {"message": "Activity updated successfully"}

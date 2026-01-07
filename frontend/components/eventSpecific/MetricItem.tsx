@@ -56,6 +56,8 @@ const MetricItem = React.memo(({
       displayValue = formatTime(value);
     } else if (field === 'weight') {
       displayValue = `${value} kg`;
+    } else if (field === 'reps') {
+      displayValue = `${value} reps`;
     } else if (field === 'is_success') {
       return (
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
@@ -158,6 +160,7 @@ const MetricItem = React.memo(({
         <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors['border-default'] }}>
           {metric.time !== undefined && metric.time !== null && renderField('time', metric.time)}
           {metric.weight !== undefined && metric.weight !== null && renderField('weight', metric.weight)}
+          {metric.reps !== undefined && metric.reps !== null && renderField('reps', metric.reps)}
           {metric.type_of_activity && renderField('type_of_activity', metric.type_of_activity)}
           {metric.is_success !== undefined && renderField('is_success', metric.is_success)}
         </View>

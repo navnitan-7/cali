@@ -12,6 +12,7 @@ interface AuthStore {
   token: string | null;
   isLoading: boolean;
   error: string | null;
+  isAdmin: () => boolean;
   login: (name: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, fullName: string) => Promise<{ success: boolean; message: string }>;
   logout: () => Promise<void>;
@@ -82,6 +83,11 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       isLoading: false,
       error: null,
+
+      isAdmin: () => {
+        const user = get().user;
+        return user?.role === 'admin';
+      },
 
       login: async (name: string, password: string) => {
         console.log('[AuthStore] Login initiated for:', name);

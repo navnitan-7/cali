@@ -4,6 +4,7 @@ export interface ActivityMetric {
   attempt_id: number;
   time?: number;
   weight?: number;
+  reps?: number;
   type_of_activity?: string;
   is_success?: boolean;
 }

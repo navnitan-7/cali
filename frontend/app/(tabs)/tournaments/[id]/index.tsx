@@ -12,6 +12,7 @@ import TabSwitch from '../../../../components/ui/TabSwitch';
 import FloatingActionButton from '../../../../components/ui/FloatingActionButton';
 import { SkeletonContainer } from '../../../../components/ui/Skeleton';
 import { useTournamentStore } from '../../../../stores/tournamentStore';
+import { useAuthStore } from '../../../../stores/authStore';
 import { getTournamentAccent, getTournamentAccentDark } from '../../../../utils/tournamentAccent';
 import ConfirmDialog from '../../../../components/ui/ConfirmDialog';
 
@@ -22,6 +23,7 @@ export default function TournamentDetailScreen() {
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
   const { getTournament, deleteTournament, syncEventsOnly, syncParticipantsOnly, isLoadingEvents, isLoadingParticipants } = useTournamentStore();
+  const { isAdmin } = useAuthStore();
   const [activeTab, setActiveTab] = useState('Events');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -369,12 +371,14 @@ export default function TournamentDetailScreen() {
                 {new Date(tournament.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => setMenuVisible(true)}
-              style={{ padding: 4 }}
-            >
-              <Ionicons name="ellipsis-vertical" size={22} color={colors['text-primary']} />
-            </TouchableOpacity>
+            {isAdmin() && (
+              <TouchableOpacity
+                onPress={() => setMenuVisible(true)}
+                style={{ padding: 4 }}
+              >
+                <Ionicons name="ellipsis-vertical" size={22} color={colors['text-primary']} />
+              </TouchableOpacity>
+            )}
           </View>
           
           {/* Accent border at bottom - Level 1 */}
@@ -430,16 +434,18 @@ export default function TournamentDetailScreen() {
           </View>
         </ScrollView>
 
-        <FloatingActionButton
-          onPress={() => {
-            if (activeTab === 'Events') {
-              router.push(`/(tabs)/tournaments/${tournamentId}/events/create` as any);
-            } else {
-              router.push(`/(tabs)/tournaments/${tournamentId}/participants/create` as any);
-            }
-          }}
-          icon="add"
-        />
+        {isAdmin() && (
+          <FloatingActionButton
+            onPress={() => {
+              if (activeTab === 'Events') {
+                router.push(`/(tabs)/tournaments/${tournamentId}/events/create` as any);
+              } else {
+                router.push(`/(tabs)/tournaments/${tournamentId}/participants/create` as any);
+              }
+            }}
+            icon="add"
+          />
+        )}
       </View>
 
       {/* Tournament Menu Modal */}

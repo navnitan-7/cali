@@ -9,6 +9,7 @@ import { getFontFamily } from '../../../../../utils/fonts';
 import TabSwitch from '../../../../../components/ui/TabSwitch';
 import { SkeletonContainer } from '../../../../../components/ui/Skeleton';
 import { useTournamentStore } from '../../../../../stores/tournamentStore';
+import { useAuthStore } from '../../../../../stores/authStore';
 import ConfirmDialog from '../../../../../components/ui/ConfirmDialog';
 import { getTournamentAccent, getTournamentAccentDark } from '../../../../../utils/tournamentAccent';
 
@@ -29,6 +30,7 @@ export default function EventDetailScreen() {
     syncEventDetails,
     isLoadingEventDetails,
   } = useTournamentStore();
+  const { isAdmin } = useAuthStore();
   const [activeTab, setActiveTab] = useState('Participants');
   const [menuVisible, setMenuVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -606,9 +608,11 @@ export default function EventDetailScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ padding: 4 }}>
-              <Ionicons name="ellipsis-horizontal" size={20} color={colors['text-primary']} />
-            </TouchableOpacity>
+            {isAdmin() && (
+              <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ padding: 4 }}>
+                <Ionicons name="ellipsis-horizontal" size={20} color={colors['text-primary']} />
+              </TouchableOpacity>
+            )}
           </View>
           
           {/* Accent border - Level 2: More subtle */}

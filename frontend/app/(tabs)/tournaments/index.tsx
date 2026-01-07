@@ -11,6 +11,7 @@ import { SkeletonContainer } from '../../../components/ui/Skeleton';
 import { useColors } from '../../../utils/colors';
 import { getFontFamily } from '../../../utils/fonts';
 import { useTournamentStore } from '../../../stores/tournamentStore';
+import { useAuthStore } from '../../../stores/authStore';
 import { getTournamentAccent, getTournamentAccentDark } from '../../../utils/tournamentAccent';
 
 function formatDate(dateString: string) {
@@ -147,6 +148,7 @@ export default function TournamentsScreen() {
   const colors = useColors(isDark);
   const insets = useSafeAreaInsets();
   const { tournaments, syncEventsFromBackend, isLoadingEvents } = useTournamentStore();
+  const { isAdmin } = useAuthStore();
   const [showTopFade, setShowTopFade] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -318,10 +320,12 @@ export default function TournamentsScreen() {
           </View>
         )}
 
-        <FloatingActionButton
-          onPress={() => router.push('/(tabs)/tournaments/create' as any)}
-          icon="add"
-        />
+        {isAdmin() && (
+          <FloatingActionButton
+            onPress={() => router.push('/(tabs)/tournaments/create' as any)}
+            icon="add"
+          />
+        )}
       </View>
     </SafeAreaView>
   );

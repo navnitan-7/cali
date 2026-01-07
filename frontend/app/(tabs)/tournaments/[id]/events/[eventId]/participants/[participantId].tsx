@@ -346,7 +346,13 @@ export default function EventParticipantDetailScreen() {
           : (formValues['is_success'] !== undefined 
               ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
               : null),
-        reps: null,
+        reps: requiredFields.includes('reps')
+          ? (typeof validatedValues['reps'] === 'number' 
+              ? validatedValues['reps'] 
+              : parseInt(validatedValues['reps']))
+          : (formValues['reps'] !== undefined && formValues['reps'] !== '' 
+              ? (typeof formValues['reps'] === 'number' ? formValues['reps'] : parseInt(formValues['reps']))
+              : null),
         is_deleted: false,
       };
 
@@ -661,6 +667,24 @@ export default function EventParticipantDetailScreen() {
               fontSize: 14,
             }}
           />
+        ) : field === 'reps' ? (
+          <TextInput
+            placeholder="Number of reps"
+            placeholderTextColor={colors['text-secondary']}
+            value={formValues[field]?.toString() || ''}
+            onChangeText={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+            keyboardType="number-pad"
+            style={{
+              borderWidth: 1,
+              borderColor: colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-primary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 14,
+            }}
+          />
         ) : field === 'type_of_activity' ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
             {ACTIVITY_TYPES.map((activityType) => {
@@ -773,6 +797,24 @@ export default function EventParticipantDetailScreen() {
             value={formValues[field]?.toString() || ''}
             onChangeText={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
             keyboardType="decimal-pad"
+            style={{
+              borderWidth: 1,
+              borderColor: colors['border-default'],
+              borderRadius: 8,
+              padding: 12,
+              color: colors['text-primary'],
+              fontFamily: getFontFamily('regular'),
+              backgroundColor: colors['bg-secondary'],
+              fontSize: 14,
+            }}
+          />
+        ) : field === 'reps' ? (
+          <TextInput
+            placeholder="Number of reps"
+            placeholderTextColor={colors['text-secondary']}
+            value={formValues[field]?.toString() || ''}
+            onChangeText={(value) => setFormValues(prev => ({ ...prev, [field]: value }))}
+            keyboardType="number-pad"
             style={{
               borderWidth: 1,
               borderColor: colors['border-default'],
@@ -1509,7 +1551,11 @@ export default function EventParticipantDetailScreen() {
           : (formValues['is_success'] !== undefined 
               ? (formValues['is_success'] === true || formValues['is_success'] === 'true')
               : true), // Default to true
-        reps: null,
+        reps: validatedValues['reps'] 
+          ? (typeof validatedValues['reps'] === 'number' ? validatedValues['reps'] : parseInt(validatedValues['reps']))
+          : (formValues['reps'] !== undefined && formValues['reps'] !== ''
+              ? (typeof formValues['reps'] === 'number' ? formValues['reps'] : parseInt(formValues['reps']))
+              : null),
         is_deleted: false,
       };
 
