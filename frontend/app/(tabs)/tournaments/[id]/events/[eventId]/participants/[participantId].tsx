@@ -441,7 +441,8 @@ export default function EventParticipantDetailScreen() {
   const shareVideoToResilio = useCallback(async (videoUri: string, mimeType: string) => {
     const participantName = participant?.name || 'Unknown';
     const category = event?.category || event?.name || 'Video';
-    const timestamp = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     const dialogTitle = `${participantName}_${category}_${timestamp}`;
 
     const isSharingAvailable = await Sharing.isAvailableAsync();
@@ -472,7 +473,8 @@ export default function EventParticipantDetailScreen() {
         if (file) {
           const participantName = participant?.name?.replace(/\s+/g, '_') || 'Unknown';
           const category = (event?.category || event?.name || 'Video').replace(/\s+/g, '_');
-          const timestamp = new Date().toISOString().slice(0, 10);
+          const now = new Date();
+          const timestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
           const extension = file.name.split('.').pop() || 'mp4';
           const newFileName = `${participantName}_${category}_${timestamp}.${extension}`;
 
