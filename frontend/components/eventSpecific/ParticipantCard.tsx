@@ -107,20 +107,26 @@ export default function ParticipantCard({
     </View>
   );
 
-  // Web-specific styles to allow scrolling through this element
-  const webStyles = Platform.OS === 'web' ? {
-    cursor: 'pointer',
-    touchAction: 'pan-y',
-    userSelect: 'none',
-  } : {};
-
   if (onPress) {
+    // On web, use a View with onClick to avoid touch event conflicts with scrolling
+    if (Platform.OS === 'web') {
+      return (
+        <View
+          style={{ cursor: 'pointer' } as any}
+          // @ts-ignore - web-specific onClick prop
+          onClick={onPress}
+        >
+          <CardContent />
+        </View>
+      );
+    }
+
+    // On native, use TouchableOpacity with delayPressIn for scroll-friendly behavior
     return (
       <TouchableOpacity 
         onPress={onPress} 
         activeOpacity={0.7} 
         delayPressIn={100}
-        style={webStyles as any}
       >
         <CardContent />
       </TouchableOpacity>
